@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/petani-app/' : '/',
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   server: { host: '0.0.0.0', port: 5173, strictPort: true },

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+const BASE = import.meta.env.BASE_URL
 
 type Tab = 'home' | 'groovi' | 'spring' | 'profile' | 'gladipoint' | 'gladisplash' | 'agrosplash' | 'konsultasi'
 
@@ -338,18 +339,18 @@ function Header({
 }
 
 const banners = [
-  { src: '/assets/promo-drone.jpg', title: 'Promo Aplikasi Pemupukan dengan Drone' },
-  { src: '/assets/samber-banner.jpg', title: 'Program SAMBER' },
+  { src: `${BASE}assets/promo-drone.jpg`, title: 'Promo Aplikasi Pemupukan dengan Drone' },
+  { src: `${BASE}assets/samber-banner.jpg`, title: 'Program SAMBER' },
 ]
 
 const products = [
   {
-    src: '/assets/product-kplus.jpg',
+    src: `${BASE}assets/product-kplus.jpg`,
     name: 'Petro K Plus 30',
     desc: 'Petro K Plus 30 adalah pupuk KCl Boron berbentuk granul.',
   },
   {
-    src: '/assets/product-cas.jpg',
+    src: `${BASE}assets/product-cas.jpg`,
     name: 'PETRO-CAS (Calcium Sulfat)',
     desc: 'Petro-CAS adalah pembenah tanah kalsium sulfat.',
   },
@@ -775,7 +776,7 @@ function AgroSplash({ onDone }: { onDone: () => void }) {
   return (
     <div className="gladi-splash agro-splash" onClick={onDone} role="status" aria-label="Kembali ke AgroFertile">
       <div className="splash-center">
-        <img className="splash-logo agro-logo" src="/assets/agrofertile-logo.png" alt="AgroFertile Apps" />
+        <img className="splash-logo agro-logo" src={`${BASE}assets/agrofertile-logo.png`} alt="AgroFertile Apps" />
       </div>
       <div className="splash-footer">
         <div className="splash-progress agro-progress" aria-hidden="true">
@@ -802,7 +803,7 @@ function GladiSplash({ onDone }: { onDone: () => void }) {
         <path d="M110 6C40 10 6 52 8 108c1 26 18 46 44 46 52 0 62-72 58-148z" />
       </svg>
       <div className="splash-center">
-        <img className="splash-logo" src="/assets/gladipoint-logo.png" alt="GladiPoint" />
+        <img className="splash-logo" src={`${BASE}assets/gladipoint-logo.png`} alt="GladiPoint" />
         <p className="splash-tagline">Bersama untuk Pertanian Lebih Baik</p>
       </div>
       <div className="splash-footer">
@@ -861,28 +862,28 @@ const rewards = [
   {
     name: 'Petro Gladiator 1kg',
     cost: 700,
-    img: '/assets/reward-gladiator.jpg',
+    img: `${BASE}assets/reward-gladiator.jpg`,
     stock: 25,
     desc: 'Pupuk organik Petro Gladiator kemasan 1 kg untuk membantu memperbaiki kesuburan tanah dan menambah bahan organik.',
   },
   {
     name: 'Kaos Petani',
     cost: 700,
-    img: '/assets/reward-kaos.jpg',
+    img: `${BASE}assets/reward-kaos.jpg`,
     stock: 40,
     desc: 'Kaos eksklusif GladiPoint berbahan nyaman, cocok dipakai bekerja di lahan maupun sehari-hari.',
   },
   {
     name: 'Phonska Cair 500ml',
     cost: 800,
-    img: '/assets/reward-phonska-cair.jpg',
+    img: `${BASE}assets/reward-phonska-cair.jpg`,
     stock: 18,
     desc: 'Pupuk cair Phonska Cair NPK 10-8-3 kemasan 500 ml untuk mendukung pertumbuhan tanaman.',
   },
   {
     name: 'Phonska OCA Plus',
     cost: 1100,
-    img: '/assets/reward-oca.jpg',
+    img: `${BASE}assets/reward-oca.jpg`,
     stock: 12,
     desc: 'Phonska OCA Plus kemasan 1 liter, pupuk cair untuk membantu pertumbuhan dan hasil tanaman.',
   },
@@ -1167,11 +1168,11 @@ const periods = {
     status: 'Berjalan',
     note: 'Periode masih berlangsung. Peringkat diperbarui setiap setoran disahkan. Penutupan: 3 Des 2026, 23.59 WIB.',
     rows: [
-      { name: 'Demo F.', kg: 12.5, photo: '/assets/peserta-1.jpg', me: true },
-      { name: 'Siti R.', kg: 11, photo: '/assets/peserta-2.jpg' },
-      { name: 'Sri W.', kg: 9.5, photo: '/assets/peserta-3.jpg' },
-      { name: 'Budi S.', kg: 7, photo: '/assets/peserta-4.jpg' },
-      { name: 'Haji M.', kg: 5, photo: '/assets/peserta-5.jpg' },
+      { name: 'Demo F.', kg: 12.5, photo: `${BASE}assets/peserta-1.jpg`, me: true },
+      { name: 'Siti R.', kg: 11, photo: `${BASE}assets/peserta-2.jpg` },
+      { name: 'Sri W.', kg: 9.5, photo: `${BASE}assets/peserta-3.jpg` },
+      { name: 'Budi S.', kg: 7, photo: `${BASE}assets/peserta-4.jpg` },
+      { name: 'Haji M.', kg: 5, photo: `${BASE}assets/peserta-5.jpg` },
     ] as Entry[],
   },
   okt: {
@@ -1179,11 +1180,11 @@ const periods = {
     status: 'Selesai',
     note: 'Periode sudah ditutup. Peringkat tidak berubah lagi.',
     rows: [
-      { name: 'Siti R.', kg: 14, photo: '/assets/peserta-2.jpg' },
-      { name: 'Demo F.', kg: 10, photo: '/assets/peserta-1.jpg', me: true },
-      { name: 'Sri W.', kg: 9, photo: '/assets/peserta-3.jpg' },
-      { name: 'Haji M.', kg: 6, photo: '/assets/peserta-5.jpg' },
-      { name: 'Budi S.', kg: 4.5, photo: '/assets/peserta-4.jpg' },
+      { name: 'Siti R.', kg: 14, photo: `${BASE}assets/peserta-2.jpg` },
+      { name: 'Demo F.', kg: 10, photo: `${BASE}assets/peserta-1.jpg`, me: true },
+      { name: 'Sri W.', kg: 9, photo: `${BASE}assets/peserta-3.jpg` },
+      { name: 'Haji M.', kg: 6, photo: `${BASE}assets/peserta-5.jpg` },
+      { name: 'Budi S.', kg: 4.5, photo: `${BASE}assets/peserta-4.jpg` },
     ] as Entry[],
   },
 }
@@ -1864,7 +1865,7 @@ function GladiPoint({
             <Icon name="back" />
           </button>
           <div className="gp-brand">
-            <img src="/assets/gladipoint-logo.png" alt="GladiPoint" />
+            <img src={`${BASE}assets/gladipoint-logo.png`} alt="GladiPoint" />
             <span>Bersama untuk Pertanian Lebih Baik</span>
           </div>
           <button
@@ -2202,7 +2203,7 @@ function Spring({ onBack, onConsult }: { onBack: () => void; onConsult: () => vo
     <main className="page spring-page">
       <Header title="Petro Spring" subtitle="Sewa drone untuk pertanian" onBack={onBack} />
       <section className="spring-hero">
-        <img src="/assets/drone-hero.jpg" alt="Drone untuk pemupukan pertanian" />
+        <img src={`${BASE}assets/drone-hero.jpg`} alt="Drone untuk pemupukan pertanian" />
         <div>
           <h2>Tingkatkan Produktivitas Pertanian Anda</h2>
           <p>Sewa drone untuk penyebaran pupuk lebih efisien dan optimal.</p>
@@ -3466,7 +3467,7 @@ function MitraGladi({
             <Icon name="back" />
           </button>
           <div className="gp-brand">
-            <img src="/assets/gladipoint-logo.png" alt="GladiPoint" />
+            <img src={`${BASE}assets/gladipoint-logo.png`} alt="GladiPoint" />
             <span>Bersama untuk Pertanian Lebih Baik</span>
           </div>
           <button className="gp-bell" aria-label="Notifikasi">
