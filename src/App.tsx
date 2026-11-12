@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 const BASE = import.meta.env.BASE_URL
 
 type Tab = 'home' | 'groovi' | 'spring' | 'profile' | 'gladipoint' | 'gladisplash' | 'agrosplash' | 'konsultasi'
@@ -251,6 +253,38 @@ function Icon({
       </>
     ),
     plus: <path d="M12 5v14M5 12h14" />,
+    barchart: <path d="M6 20V11M12 20V4M18 20v-6" />,
+    linechart: <path d="M3 17l6-6 4 4 8-9" />,
+    download: (
+      <>
+        <path d="M12 4v11M7.500 10.500 12 15l4.500-4.500M5 20h14" />
+      </>
+    ),
+    store: (
+      <>
+        <path d="M4 9l1.500-5h13L20 9" />
+        <path d="M4 9a2.700 2.700 0 0 0 5.300 0 2.700 2.700 0 0 0 5.400 0A2.700 2.700 0 0 0 20 9" />
+        <path d="M5 12v8h14v-8M10 20v-5h4v5" />
+      </>
+    ),
+    edit: (
+      <>
+        <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+        <path d="m13.500 6.500 4 4" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M4 7h16M10 11v6M14 11v6" />
+        <path d="M6 7l1 13h10l1-13M9 7V4h6v3" />
+      </>
+    ),
+    external: (
+      <>
+        <path d="M14 4h6v6M20 4l-9 9" />
+        <path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+      </>
+    ),
     recycle: (
       <>
         <path d="M7 19H5.500a1.500 1.500 0 0 1-1.300-2.200L6 14M17 19l2-3.500M12 4.500l1.700 3M9 8 7.500 5.500M15 8l2.500-1M10 19h5" />
@@ -368,7 +402,7 @@ const initialsOf = (name: string) =>
     .map((part) => part[0]?.toUpperCase())
     .join('') || '?'
 
-const roles = ['Petani', 'Agroman', 'Agronomis', 'Mitra', 'Admin'] as const
+const roles = ['Petani', 'Agroman', 'Agronomis', 'Mitra', 'Admin', 'Super Admin'] as const
 type AppRole = (typeof roles)[number]
 
 function AccountPage({
@@ -641,15 +675,19 @@ function Home({
   account,
   photo,
   role,
+  redemptions,
 }: {
   role: AppRole
   setTab: (tab: Tab) => void
   points: number
   account: Account
   photo: string | null
+  redemptions: Redemption[]
 }) {
   const [promo, setPromo] = useState<number | null>(null)
   const [banner, setBanner] = useState(0)
+  const admin = role === 'Super Admin'
+  const adminRows = mitraRanking(periodOf(TODAY))
 
   return (
     <>
@@ -666,6 +704,38 @@ function Home({
           </button>
         </section>
 
+        {admin ? (
+          <button className="farm-card" onClick={() => setTab('gladisplash')}>
+            <svg className="farm-deco" viewBox="0 0 200 120" aria-hidden="true">
+              <path d="M-10 90C30 60 60 100 100 70s70-30 110-10" />
+              <path d="M-10 110C30 80 60 120 100 90s70-30 110-10" />
+            </svg>
+            <div className="farm-location">
+              <Icon name="pin" size={14} />
+              <span>Seluruh wilayah program GladiPoint · Jawa Timur</span>
+            </div>
+            <div className="farm-row">
+              <div className="farm-area">
+                <strong>{adminRows.length}</strong>
+                <span>Mitra</span>
+              </div>
+              <div className="farm-stats">
+                <div>
+                  <span>BSO {periodOf(TODAY)}</span>
+                  <strong>{idNumber(adminRows.reduce((sum, row) => sum + row.kg, 0))} kg</strong>
+                </div>
+                <div>
+                  <span>Member</span>
+                  <strong>{mitraMembers.length}</strong>
+                </div>
+                <div>
+                  <span>Hadiah menunggu</span>
+                  <strong>{redemptions.filter((item) => !item.received).length}</strong>
+                </div>
+              </div>
+            </div>
+          </button>
+        ) : (
         <button className="farm-card" onClick={() => setTab('profile')}>
           <svg className="farm-deco" viewBox="0 0 200 120" aria-hidden="true">
             <path d="M-10 90C30 60 60 100 100 70s70-30 110-10" />
@@ -696,12 +766,13 @@ function Home({
             </div>
           </div>
         </button>
+        )}
 
         <section className="quick-grid" aria-label="Akses cepat">
           <button onClick={() => setTab('gladisplash')}>
             <Icon name="trophy" size={30} />
             <span>GladiPoint</span>
-            <span className="points-pill">{points} Poin</span>
+            <span className="points-pill">{admin ? `${adminRows.length} Mitra` : `${points} Poin`}</span>
           </button>
           <button onClick={() => setTab('spring')}>
             <Icon name="drone" size={30} />
@@ -822,13 +893,14 @@ type Activity = {
   id: string
   kind: 'setoran' | 'tukar'
   ref: string
-  status: 'Terverifikasi' | 'Berhasil'
+  status: 'Terverifikasi' | 'Berhasil' | 'Menunggu diambil' | 'Diterima'
   title: string
   meta: string
   amount: string
   points: string
   name: string
   member: string
+  note?: string
 }
 
 const initialActivities: Activity[] = [
@@ -939,9 +1011,10 @@ function RewardCard({
 }
 
 function StatusPill({ status }: { status: Activity['status'] }) {
+  const waiting = status === 'Menunggu diambil'
   return (
-    <span className="status-pill">
-      <Icon name="check" size={13} strokeWidth={2.4} />
+    <span className={`status-pill${waiting ? ' pending' : ''}`}>
+      <Icon name={waiting ? 'clock' : 'check'} size={13} strokeWidth={2.4} />
       {status}
     </span>
   )
@@ -958,6 +1031,7 @@ function ActivityCard({ item, onClick }: { item: Activity; onClick?: () => void 
         </div>
         <strong>{item.title}</strong>
         <small>{item.meta}</small>
+        {item.note && <small className={`act-note${item.status === 'Diterima' ? ' done' : ''}`}>{item.note}</small>}
       </div>
       <div className="act-side">
         <b>{item.amount}</b>
@@ -1562,6 +1636,9 @@ function GladiPoint({
   onBack,
   points,
   activities,
+  redemptions,
+  productions,
+  pickups,
   onRedeem,
   account,
   setAccount,
@@ -1571,7 +1648,10 @@ function GladiPoint({
   onBack: () => void
   points: number
   activities: Activity[]
-  onRedeem: (reward: { name: string; cost: number }) => void
+  redemptions: Redemption[]
+  productions: Production[]
+  pickups: Pickup[]
+  onRedeem: (reward: { name: string; cost: number }) => string
   account: Account
   setAccount: (account: Account) => void
   photo: string | null
@@ -1579,7 +1659,12 @@ function GladiPoint({
 }) {
   const [view, setView] = useState<GladiView>('home')
   const [redeeming, setRedeeming] = useState<Reward | null>(null)
-  const [redeemed, setRedeemed] = useState<string | null>(null)
+  const [redeemed, setRedeemed] = useState<{ name: string; id: string } | null>(null)
+  const [hadiahTab, setHadiahTab] = useState<'hadiah' | 'riwayat'>('hadiah')
+  const myRedemptions = redemptions.filter((item) => item.code === 'GP-00001').map(redemptionActivity)
+  // Stok mitra periode berjalan: angka yang sama dengan Stok Tersedia di role Mitra.
+  const stock = mitraSummary(periodOf(TODAY), productions, pickups)
+
   const [detail, setDetail] = useState<Reward | null>(null)
   const [unread, setUnread] = useState(true)
   const [partnerDetail, setPartnerDetail] = useState(false)
@@ -1587,6 +1672,39 @@ function GladiPoint({
   const [query, setQuery] = useState('')
   const [sheet, setSheet] = useState<'qr' | null>(null)
   const [qrVersion, setQrVersion] = useState(1)
+
+  // Navbar bawah: Aktivitas, QR Member (tengah), Hadiah. Tap menu aktif kembali ke beranda.
+  const gladiNav = (
+    <nav className="mt-nav gp-nav" aria-label="Navigasi GladiPoint">
+      {(
+        [
+          ['aktivitas', 'activity', 'Aktivitas'],
+          ['hadiah', 'gift', 'Hadiah'],
+        ] as const
+      ).map(([key, icon, label]) => (
+        <button
+          key={key}
+          className={`${view === key ? 'active' : ''}${key === 'hadiah' ? ' right' : ''}`}
+          onClick={() => setView(view === key ? 'home' : key)}
+          aria-current={view === key ? 'page' : undefined}
+        >
+          <Icon name={icon} size={22} />
+          <span>{label}</span>
+        </button>
+      ))}
+      <button className="mt-nav-fab" onClick={() => setSheet('qr')} aria-label="Tampilkan QR Member">
+        <Icon name="qr" size={26} strokeWidth={2.2} />
+      </button>
+    </nav>
+  )
+  const gladiQr =
+    sheet === 'qr' ? (
+      <QrSheet
+        version={qrVersion}
+        onRegenerate={() => setQrVersion((value) => value + 1)}
+        onClose={() => setSheet(null)}
+      />
+    ) : null
 
   if (view === 'notifikasi') {
     return <NotificationPage activities={activities} onBack={() => setView('home')} />
@@ -1610,7 +1728,7 @@ function GladiPoint({
 
   if (view === 'aktivitas') {
     const q = query.trim().toLowerCase()
-    const inTab = activities.filter((item) => (actTab === 'bso' ? item.kind === 'setoran' : item.kind === 'tukar'))
+    const inTab = actTab === 'bso' ? activities.filter((item) => item.kind === 'setoran') : myRedemptions
     const shown = inTab.filter(
       (item) =>
         !q ||
@@ -1619,7 +1737,8 @@ function GladiPoint({
         ),
     )
     return (
-      <main className="page gladi-page">
+      <>
+      <main className="page gladi-page has-nav">
         <Header title="Aktivitas" subtitle="Setoran dan penukaran poin" onBack={() => setView('home')} />
         <div className="act-tabs" role="tablist">
           {(
@@ -1667,31 +1786,64 @@ function GladiPoint({
           )}
         </section>
       </main>
+      {gladiNav}
+      {gladiQr}
+      </>
     )
   }
 
   if (view === 'hadiah') {
     return (
       <>
-        <main className="page gladi-page">
+        <main className="page gladi-page has-nav">
           <Header title="Hadiah" subtitle={`Poin Anda ${points}`} onBack={() => setView('home')} />
-          {redeemed && (
-            <p className="gp-qr-done" role="status">
-              Poin berhasil ditukar: {redeemed}. Cek di menu Aktivitas.
-            </p>
-          )}
-          <section className="reward-grid">
-            {rewards.map((reward) => (
-              <RewardCard
-                key={reward.name}
-                reward={reward}
-                points={points}
-                onClick={() => setDetail(reward)}
-                onRedeem={setRedeeming}
-              />
+          <div className="act-tabs" role="tablist">
+            {(
+              [
+                ['hadiah', 'Hadiah'],
+                ['riwayat', 'Riwayat penukaran'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                role="tab"
+                aria-selected={hadiahTab === key}
+                className={hadiahTab === key ? 'active' : ''}
+                onClick={() => setHadiahTab(key)}
+              >
+                {label}
+              </button>
             ))}
-          </section>
+          </div>
+          {hadiahTab === 'hadiah' ? (
+            <section className="reward-grid">
+              {rewards.map((reward) => (
+                <RewardCard
+                  key={reward.name}
+                  reward={reward}
+                  points={points}
+                  onClick={() => setDetail(reward)}
+                  onRedeem={setRedeeming}
+                />
+              ))}
+            </section>
+          ) : (
+            <section className="act-list">
+              {myRedemptions.map((item) => (
+                <ActivityCard key={item.id} item={item} />
+              ))}
+              {myRedemptions.length === 0 && (
+                <div className="act-empty">
+                  <Icon name="gift" size={36} />
+                  <strong>Belum ada penukaran</strong>
+                  <span>Penukaran hadiah Anda akan muncul di sini.</span>
+                </div>
+              )}
+            </section>
+          )}
         </main>
+        {gladiNav}
+        {gladiQr}
         {detail && (
           <div className="modal-backdrop" onClick={() => setDetail(null)}>
             <section className="promo-sheet gp-sheet rw-sheet" onClick={(event) => event.stopPropagation()}>
@@ -1712,23 +1864,23 @@ function GladiPoint({
               </div>
               <section className="rw-info">
                 <h3>
-                  <Icon name="truck" size={20} /> Pengiriman
+                  <Icon name="pin" size={20} /> Pengambilan hadiah
                 </h3>
                 <p>
-                  Hadiah dikirim langsung dari pusat ke alamat korespondensi Anda. Anda tidak perlu memilih atau
-                  datang ke lokasi mana pun — cukup ajukan.
+                  Hadiah diambil langsung di tempat mitra, {MY_MITRA}. Tunjukkan kode transaksi dan kode member Anda
+                  kepada mitra.
                 </p>
               </section>
               <section className="rw-info">
                 <h3>Ketentuan</h3>
                 <ul>
                   <li>
-                    <Icon name="truck" size={20} />
-                    <span>Dikirim ke alamat korespondensi Anda oleh admin program.</span>
+                    <Icon name="users" size={20} />
+                    <span>Diambil di mitra. Mitra mengonfirmasi dengan foto, lalu waktu penerimaan tercatat di Riwayat penukaran.</span>
                   </li>
                   <li>
                     <Icon name="info" size={20} />
-                    <span>Pengajuan dapat dibatalkan selama belum dikirim; poin dikembalikan penuh.</span>
+                    <span>Pengajuan dapat dibatalkan selama hadiah belum diambil; poin dikembalikan penuh.</span>
                   </li>
                   <li>
                     <Icon name="info" size={20} />
@@ -1781,12 +1933,49 @@ function GladiPoint({
                   <button
                     className="strong"
                     onClick={() => {
-                      onRedeem(redeeming)
-                      setRedeemed(redeeming.name)
+                      const id = onRedeem(redeeming)
+                      setRedeemed({ name: redeeming.name, id })
                       setRedeeming(null)
                     }}
                   >
                     Ya, tukar
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+        {redeemed && (
+          <div className="modal-backdrop" onClick={() => setRedeemed(null)}>
+            <section className="promo-sheet gp-sheet rw-done" onClick={(event) => event.stopPropagation()}>
+              <button className="sheet-handle" onClick={() => setRedeemed(null)} aria-label="Tutup" />
+              <span className="rw-done-icon">
+                <Icon name="check" size={28} strokeWidth={3} />
+              </span>
+              <h2>Penukaran berhasil</h2>
+              <p>
+                {redeemed.name} · kode <b>{redeemed.id}</b>
+              </p>
+              <section className="rw-info">
+                <h3>
+                  <Icon name="pin" size={20} /> Ambil hadiah di mitra
+                </h3>
+                <p>
+                  Datang ke {MY_MITRA} dan tunjukkan kode transaksi serta kode member GP-00001. Setelah mitra
+                  mengonfirmasi dengan foto, waktu penerimaan hadiah tercatat di Riwayat penukaran.
+                </p>
+              </section>
+              <div className="gp-confirm sheet-confirm">
+                <div>
+                  <button onClick={() => setRedeemed(null)}>Tutup</button>
+                  <button
+                    className="strong"
+                    onClick={() => {
+                      setRedeemed(null)
+                      setHadiahTab('riwayat')
+                    }}
+                  >
+                    Lihat riwayat
                   </button>
                 </div>
               </div>
@@ -1859,7 +2048,7 @@ function GladiPoint({
 
   return (
     <>
-      <main className="page gladi-page gp-home">
+      <main className="page gladi-page gp-home has-nav">
         <header className="gp-top">
           <button className="icon-button" onClick={onBack} aria-label="Kembali ke AgroFertile">
             <Icon name="back" />
@@ -1969,7 +2158,6 @@ function GladiPoint({
         <section className="gp-stock">
           <div className="gp-stock-head">
             <h2>Stok kompos mitra</h2>
-            <span>Level Benih</span>
           </div>
           <div className="gp-stock-items">
             <div>
@@ -1977,7 +2165,7 @@ function GladiPoint({
                 <Icon name="sprout" size={20} />
               </span>
               <p>
-                <strong>0 kg</strong>
+                <strong>{idNumber(stock.tersedia)} kg</strong>
                 <small>Kompos siap diambil</small>
               </p>
             </div>
@@ -1986,26 +2174,23 @@ function GladiPoint({
                 <Icon name="drop" size={20} />
               </span>
               <p>
-                <strong>0 L</strong>
+                <strong>{idNumber(stock.nocTersedia)} L</strong>
                 <small>Nutrisi Organik Cair siap diambil</small>
               </p>
             </div>
           </div>
-          <div className="gp-bar" aria-hidden="true">
-            <i />
-          </div>
-          <small>PKG Cabang Bojonegoro · 10 kg lagi ke Tunas</small>
+          <small className="gp-stock-note">
+            {MY_MITRA} ·{' '}
+            {stock.lastTersedia
+              ? `Update terakhir ${shortDate(stock.lastTersedia)} ${stock.lastTersedia.slice(0, 4)}`
+              : 'Belum ada data'}
+          </small>
         </section>
 
       </main>
 
-      {sheet === 'qr' && (
-        <QrSheet
-          version={qrVersion}
-          onRegenerate={() => setQrVersion((value) => value + 1)}
-          onClose={() => setSheet(null)}
-        />
-      )}
+      {gladiNav}
+      {gladiQr}
 
     </>
   )
@@ -2320,7 +2505,7 @@ function BottomNav({ tab, setTab }: { tab: Tab; setTab: (tab: Tab) => void }) {
   )
 }
 
-type MitraTab = 'peringkat' | 'gladiator' | 'grafik' | 'ringkasan' | 'bso' | 'member' | 'produksi' | 'pengambilan' | 'lainnya'
+type MitraTab = 'tersedia' | 'hadiah' | 'peringkat' | 'gladiator' | 'grafik' | 'ringkasan' | 'bso' | 'member' | 'produksi' | 'pengambilan' | 'lainnya'
 
 const mitraNav: [MitraTab, string, string][] = [
   ['ringkasan', 'home', 'Ringkasan'],
@@ -2892,13 +3077,34 @@ const mitraDeposits: Deposit[] = (() => {
   return [...generated, ...fixed]
 })()
 
-function memberRanking(period: string) {
-  const totals = new Map<string, number>()
-  mitraDeposits
-    .filter((item) => period === 'Semua bulan' || periodOf(item.date) === period)
-    .forEach((item) => totals.set(item.code, (totals.get(item.code) ?? 0) + item.kg))
-  return mitraMembers
-    .map((member) => ({ member, kg: Math.round((totals.get(member.code) ?? 0) * 10) / 10 }))
+// Peringkat antar mitra: BSO (kg) tiap mitra pada periode terpilih. Mitra ini memakai data BSO sesungguhnya.
+const MY_MITRA = 'Mitra Bojonegoro Kanwil I'
+const otherMitra: { name: string; area: string; factor: number }[] = [
+  { name: 'Mitra Lamongan Kanwil II', area: 'Lamongan', factor: 1.42 },
+  { name: 'Mitra Tuban Kanwil I', area: 'Tuban', factor: 1.28 },
+  { name: 'Mitra Ngawi Kanwil I', area: 'Ngawi', factor: 1.14 },
+  { name: 'Mitra Madiun Kanwil II', area: 'Madiun', factor: 0.93 },
+  { name: 'Mitra Nganjuk Kanwil I', area: 'Nganjuk', factor: 0.84 },
+  { name: 'Mitra Jombang Kanwil III', area: 'Jombang', factor: 0.71 },
+  { name: 'Mitra Kediri Kanwil II', area: 'Kediri', factor: 0.62 },
+  { name: 'Mitra Blitar Kanwil I', area: 'Blitar', factor: 0.51 },
+  { name: 'Mitra Magetan Kanwil I', area: 'Magetan', factor: 0.43 },
+  { name: 'Mitra Pacitan Kanwil I', area: 'Pacitan', factor: 0.35 },
+  { name: 'Mitra Trenggalek Kanwil II', area: 'Trenggalek', factor: 0.27 },
+]
+
+function mitraRanking(period: string) {
+  const months = period === 'Semua bulan' ? Object.keys(mitraPeriods) : [period]
+  const mine = months.reduce((sum, key) => sum + (mitraPeriods[key]?.bso ?? 0), 0)
+  return [
+    { name: MY_MITRA, area: 'Bojonegoro', kg: mine, me: true },
+    ...otherMitra.map((item, index) => ({
+      name: item.name,
+      area: item.area,
+      kg: Math.round(months.reduce((sum, key) => sum + (mitraPeriods[key]?.bso ?? 0), 0) * item.factor * (1 + ((index * 7) % 5) / 100)),
+      me: false,
+    })),
+  ]
     .filter((row) => row.kg > 0)
     .sort((a, b) => b.kg - a.kg)
 }
@@ -3015,9 +3221,335 @@ function MitraMembers() {
   )
 }
 
-function MitraRanking({ period, onPick }: { period: string; onPick: () => void }) {
+// ---- Stok tersedia: produksi dikurangi pengambilan ----
+// Penukaran milik member -> kartu aktivitas (dipakai di Riwayat penukaran dan Aktivitas > Hadiah)
+function redemptionActivity(item: Redemption): Activity {
+  const member = mitraMembers.find((m) => m.code === item.code)
+  return {
+    id: item.id,
+    kind: 'tukar',
+    ref: item.id,
+    status: item.received ? 'Diterima' : 'Menunggu diambil',
+    title: 'Poin berhasil ditukar',
+    meta: `Ditukar ${stamp(item.at)}`,
+    note: item.received ? `Hadiah diterima ${stamp(item.received.at)}` : `Ambil hadiah di ${MY_MITRA}`,
+    amount: item.reward,
+    points: `-${fmt(item.cost)} poin`,
+    name: member?.name ?? item.code,
+    member: item.code,
+  }
+}
+
+function MitraStock({
+  data,
+  period,
+  onPick,
+}: {
+  data: ReturnType<typeof mitraSummary>
+  period: string
+  onPick: () => void
+}) {
+  const rows = [
+    ['Hasil produksi', data.jadi, data.nocJadi],
+    ['Stok diambil', data.diambil, data.nocDiambil],
+    ['Stok tersedia', data.tersedia, data.nocTersedia],
+  ] as const
+
+  return (
+    <>
+      <div className="mt-graph-head">
+        <h1>Stok tersedia</h1>
+        <button className="mt-period light" onClick={onPick} aria-label="Pilih periode">
+          <Icon name="calendar" size={15} />
+          <span>{period}</span>
+          <Icon name="chevron" size={13} />
+        </button>
+      </div>
+      <section className="mt-panel">
+        <div className="mt-usage-grid">
+          <div>
+            <span className="mt-stat-icon">
+              <Icon name="box" size={18} />
+            </span>
+            <p>
+              <small>Kompos</small>
+              <strong>
+                {idNumber(data.tersedia)} <em>kg</em>
+              </strong>
+            </p>
+          </div>
+          <div>
+            <span className="mt-stat-icon">
+              <Icon name="drop" size={18} />
+            </span>
+            <p>
+              <small>NOC</small>
+              <strong>
+                {idNumber(data.nocTersedia)} <em>L</em>
+              </strong>
+            </p>
+          </div>
+        </div>
+        <p className="mt-hint mt-calc-note">
+          {data.lastTersedia ? `Update ${shortDate(data.lastTersedia)} ${data.lastTersedia.slice(0, 4)}` : 'Belum ada data'}
+        </p>
+      </section>
+      <section className="mt-panel">
+        <h2>Perhitungan stok</h2>
+        <div className="mt-calc head">
+          <span />
+          <span>Kompos</span>
+          <span>NOC</span>
+        </div>
+        {rows.map(([label, kompos, noc], index) => (
+          <div className={`mt-calc${index === 2 ? ' total' : ''}`} key={label}>
+            <span>{label}</span>
+            <strong>
+              {idNumber(kompos)} <em>kg</em>
+            </strong>
+            <strong>
+              {idNumber(noc)} <em>L</em>
+            </strong>
+          </div>
+        ))}
+      </section>
+    </>
+  )
+}
+
+// ---- Rekap hadiah: member menukar poin, mitra konfirmasi penerimaan dengan bukti foto ----
+type Redemption = {
+  id: string
+  code: string
+  reward: string
+  cost: number
+  at: string
+  received?: { at: string; photo: string; note: string }
+}
+
+const seedRedemptions: Redemption[] = [
+  { id: 'TKR-000009', code: 'GP-00001', reward: 'Petro Gladiator 1kg', cost: 700, at: '2026-11-05T11:20:00' },
+  {
+    id: 'TKR-000002',
+    code: 'GP-00001',
+    reward: 'Kaos Petani',
+    cost: 700,
+    at: '2026-10-28T10:05:00',
+    received: { at: '2026-10-29T13:40:00', photo: `${BASE}assets/reward-kaos.jpg`, note: 'Diterima langsung di titik kumpul.' },
+  },
+  { id: 'TKR-000008', code: 'GP-00007', reward: 'Phonska Cair 500ml', cost: 800, at: '2026-11-05T08:41:00' },
+  { id: 'TKR-000007', code: 'GP-00003', reward: 'Kaos Petani', cost: 700, at: '2026-11-04T15:20:00' },
+  { id: 'TKR-000006', code: 'GP-00012', reward: 'Petro Gladiator 1kg', cost: 700, at: '2026-11-04T09:12:00' },
+  { id: 'TKR-000005', code: 'GP-00009', reward: 'Phonska OCA Plus', cost: 1100, at: '2026-11-03T13:05:00' },
+  {
+    id: 'TKR-000004',
+    code: 'GP-00005',
+    reward: 'Kaos Petani',
+    cost: 700,
+    at: '2026-11-02T10:30:00',
+    received: { at: '2026-11-02T14:08:00', photo: `${BASE}assets/reward-kaos.jpg`, note: 'Diterima langsung di titik kumpul.' },
+  },
+  {
+    id: 'TKR-000003',
+    code: 'GP-00014',
+    reward: 'Petro Gladiator 1kg',
+    cost: 700,
+    at: '2026-10-30T16:45:00',
+    received: { at: '2026-10-31T09:22:00', photo: `${BASE}assets/reward-gladiator.jpg`, note: '' },
+  },
+]
+
+const stamp = (iso: string) => {
+  const d = new Date(iso)
+  return `${d.getDate()} ${monthNames[d.getMonth()]} ${d.getFullYear()} · ${pad2(d.getHours())}.${pad2(d.getMinutes())} WIB`
+}
+
+function MitraRewards({
+  records,
+  onConfirm,
+  readOnly = false,
+}: {
+  records: Redemption[]
+  onConfirm: (id: string, received: NonNullable<Redemption['received']>) => void
+  readOnly?: boolean
+}) {
+  const [filter, setFilter] = useState<'semua' | 'menunggu' | 'diterima'>('semua')
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [photo, setPhoto] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const [notice, setNotice] = useState('')
+
+  const rows = [...records]
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .filter((item) => filter === 'semua' || (filter === 'diterima') === Boolean(item.received))
+    .map((item) => ({ item, member: mitraMembers.find((m) => m.code === item.code) }))
+  const open = records.find((item) => item.id === openId) ?? null
+  const openMember = open ? mitraMembers.find((m) => m.code === open.code) : undefined
+  const openReward = open ? rewards.find((r) => r.name === open.reward) : undefined
+  const pending = records.filter((item) => !item.received).length
+
+  function close() {
+    setOpenId(null)
+    setPhoto(null)
+    setNote('')
+  }
+
+  function pick(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (file) setPhoto(URL.createObjectURL(file))
+    event.target.value = ''
+  }
+
+  function confirm() {
+    if (!open || !photo) return
+    onConfirm(open.id, { at: new Date().toISOString(), photo, note: note.trim() })
+    setNotice(`Penerimaan ${open.reward} oleh ${openMember?.name ?? open.code} dikonfirmasi.`)
+    close()
+  }
+
+  return (
+    <>
+      <div className="mt-graph-head">
+        <h1>Rekap hadiah</h1>
+        <span className="mt-total">{pending} menunggu</span>
+      </div>
+      {notice && (
+        <p className="mt-saved" role="status">
+          <Icon name="check" size={16} strokeWidth={2.6} /> {notice}
+        </p>
+      )}
+      <div className="mt-trend-filter">
+        <div className="mt-toggle wide" role="tablist" aria-label="Status hadiah">
+          {(['semua', 'menunggu', 'diterima'] as const).map((item) => (
+            <button
+              key={item}
+              role="tab"
+              aria-selected={filter === item}
+              className={filter === item ? 'active' : ''}
+              onClick={() => setFilter(item)}
+            >
+              {item[0].toUpperCase() + item.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <section className="mt-panel mt-list">
+        {rows.length === 0 && <p className="mt-hint">Belum ada penukaran hadiah.</p>}
+        {rows.map(({ item, member }) => (
+          <button key={item.id} className="mt-member" onClick={() => setOpenId(item.id)}>
+            <span className="mt-avatar">{memberInitials(member?.name ?? item.code)}</span>
+            <span className="mt-member-info">
+              <strong>{member?.name ?? item.code}</strong>
+              <small>
+                {item.reward} · {fmt(item.cost)} poin
+              </small>
+              <small>Ditukar {stamp(item.at)}</small>
+            </span>
+            {item.received ? (
+              <span className="mt-status done">
+                <Icon name="check" size={13} strokeWidth={2.8} /> Diterima
+              </span>
+            ) : (
+              <span className="mt-status wait">{readOnly ? 'Menunggu' : 'Konfirmasi'}</span>
+            )}
+          </button>
+        ))}
+      </section>
+
+      {open && (
+        <div className="modal-backdrop" onClick={close}>
+          <section className="promo-sheet gp-sheet mt-picker mt-scroll" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={close} aria-label="Tutup" />
+            <div className="mt-member-head">
+              <span className="mt-avatar big">{memberInitials(openMember?.name ?? open.code)}</span>
+              <div>
+                <h2>{openMember?.name ?? open.code}</h2>
+                <small>
+                  {open.code} · {openMember?.village}
+                </small>
+              </div>
+            </div>
+            <div className="mt-reward-line">
+              <span className="mt-reward-thumb">
+                {openReward?.img ? <img src={openReward.img} alt={open.reward} /> : <Icon name="gift" size={24} />}
+              </span>
+              <div>
+                <strong>{open.reward}</strong>
+                <small>{fmt(open.cost)} poin</small>
+              </div>
+            </div>
+            <div className="mt-sheet-sum">
+              <div>
+                <small>Waktu penukaran</small>
+                <strong>{stamp(open.at)}</strong>
+              </div>
+              <div>
+                <small>Kode transaksi</small>
+                <strong>{open.id}</strong>
+              </div>
+            </div>
+
+            {open.received ? (
+              <>
+                <h3 className="mt-sub">Bukti penerimaan</h3>
+                <img className="mt-proof-img" src={open.received.photo} alt="Bukti penerimaan hadiah" />
+                <div className="mt-sheet-sum">
+                  <div>
+                    <small>Dikonfirmasi</small>
+                    <strong>{stamp(open.received.at)}</strong>
+                  </div>
+                  <div>
+                    <small>Keterangan</small>
+                    <strong>{open.received.note || '-'}</strong>
+                  </div>
+                </div>
+              </>
+            ) : readOnly ? (
+              <p className="mt-hint">Menunggu konfirmasi penerimaan dari mitra dengan bukti foto.</p>
+            ) : (
+              <div className="mt-form">
+                <div className="mt-field">
+                  <span>Foto bukti penerimaan</span>
+                  <label className={`mt-proof${photo ? ' filled' : ''}`}>
+                    <input type="file" accept="image/*" hidden onChange={pick} />
+                    {photo ? (
+                      <img src={photo} alt="Pratinjau bukti penerimaan" />
+                    ) : (
+                      <>
+                        <Icon name="camera" size={26} />
+                        <b>Ambil atau pilih foto</b>
+                        <small>Wajib diisi sebagai bukti hadiah sudah diterima</small>
+                      </>
+                    )}
+                  </label>
+                  {photo && (
+                    <button className="mt-retake" onClick={() => setPhoto(null)}>
+                      Ganti foto
+                    </button>
+                  )}
+                </div>
+                <label className="mt-field">
+                  <span>
+                    Keterangan <em>(opsional)</em>
+                  </span>
+                  <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+                </label>
+                <button className="mt-cta" disabled={!photo} onClick={confirm}>
+                  Konfirmasi penerimaan hadiah
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+    </>
+  )
+}
+
+function MitraRanking({ period, onPick, showMe = true }: { period: string; onPick: () => void; showMe?: boolean }) {
   const [all, setAll] = useState(false)
-  const rows = memberRanking(period)
+  const rows = mitraRanking(period)
   const top = rows[0]?.kg ?? 1
   const shown = all ? rows : rows.slice(0, 10)
 
@@ -3032,13 +3564,13 @@ function MitraRanking({ period, onPick }: { period: string; onPick: () => void }
         </button>
       </div>
       <section className="mt-panel mt-list">
-        {rows.length === 0 && <p className="mt-hint">Belum ada setoran pada periode ini.</p>}
-        {shown.map(({ member, kg }, index) => (
-          <div key={member.code} className="mt-rank">
+        {rows.length === 0 && <p className="mt-hint">Belum ada data BSO pada periode ini.</p>}
+        {shown.map(({ name, area, kg, me }, index) => (
+          <div key={name} className={`mt-rank${me && showMe ? " me" : ""}`}>
             <span className={`mt-rank-no n${index + 1 <= 3 ? index + 1 : 0}`}>{index + 1}</span>
             <span className="mt-member-info">
-              <strong>{member.name}</strong>
-              <small>{member.code}</small>
+              <strong>{name}{me && showMe && <em className="mt-rank-you">Anda</em>}</strong>
+              <small>{area}</small>
               <i className="mt-rank-bar">
                 <b style={{ width: `${Math.max((kg / top) * 100, 4)}%` }} />
               </i>
@@ -3404,7 +3936,1736 @@ function MitraProduction({ records, onSave }: { records: Production[]; onSave: (
 const idNumber = (value: number, digits = 1) =>
   value.toLocaleString('id-ID', { maximumFractionDigits: digits })
 
-function MitraGladi({
+// ---- Sheet pilih periode (dipakai Mitra dan Super Admin) ----
+function MitraPeriodSheet({
+  period,
+  setPeriod,
+  pickYear,
+  setPickYear,
+  onClose,
+}: {
+  period: string
+  setPeriod: (period: string) => void
+  pickYear: number
+  setPickYear: (year: number) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="promo-sheet gp-sheet mt-picker" onClick={(event) => event.stopPropagation()}>
+        <button className="sheet-handle" onClick={onClose} aria-label="Tutup" />
+        <h2>Pilih periode</h2>
+        <button
+          className={`mt-all ${period === 'Semua bulan' ? 'active' : ''}`}
+          onClick={() => {
+            setPeriod('Semua bulan')
+            onClose()
+          }}
+        >
+          <Icon name="layers" size={20} />
+          <span>
+            <b>Semua bulan</b>
+            <small>Total seluruh periode</small>
+          </span>
+          {period === 'Semua bulan' && <Icon name="check" size={18} strokeWidth={3} />}
+        </button>
+        <div className="mt-years" role="tablist" aria-label="Tahun">
+          {mitraYears.map((year) => (
+            <button
+              key={year}
+              role="tab"
+              aria-selected={pickYear === year}
+              className={pickYear === year ? 'active' : ''}
+              onClick={() => setPickYear(year)}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+        <div className="mt-months">
+          {monthNames.map((name) => {
+            const key = `${name} ${pickYear}`
+            const empty = mitraPeriods[key].bso === 0
+            return (
+              <button
+                key={key}
+                className={`${period === key ? 'active' : ''} ${empty ? 'empty' : ''}`}
+                onClick={() => {
+                  setPeriod(key)
+                  onClose()
+                }}
+              >
+                {name}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+// ---- Kompos Station: sebaran program (peta, daftar, tambah) ----
+type Station = {
+  id: string
+  name: string
+  mitra: string
+  address: string
+  phone: string
+  hours: string
+  capacity: number
+  wastes: string[]
+  lat: number
+  lng: number
+  tx: { bso: number; produksi: number; pengambilan: number }
+}
+
+type StationDraft = Pick<Station, 'name' | 'mitra' | 'address' | 'phone' | 'hours' | 'capacity' | 'wastes' | 'lat' | 'lng'>
+
+const stationWastes = ['Sampah basah', 'Sampah kebun', 'Sampah kering', 'Sampah pasar']
+
+// Data contoh. Transaksi Bojonegoro memakai data nyata dari role Mitra.
+const seedStations: Station[] = [
+  {
+    id: 'PKG-0001',
+    name: mitraSites[0],
+    mitra: 'Mitra Bojonegoro Kanwil I',
+    address: 'Jl. Raya Bojonegoro–Cepu KM 3, Kec. Bojonegoro, Kab. Bojonegoro, Jawa Timur 62119',
+    phone: '0353 881 234',
+    hours: 'Senin–Sabtu, 08.00–16.00 WIB',
+    capacity: 2000,
+    wastes: ['Sampah basah', 'Sampah kebun', 'Sampah kering'],
+    lat: -7.1502,
+    lng: 111.8817,
+    tx: { bso: mitraDeposits.length, produksi: seedProductions.length, pengambilan: seedPickups.length },
+  },
+  {
+    id: 'PKG-0002',
+    name: mitraSites[1],
+    mitra: 'Mitra Lamongan Kanwil II',
+    address: 'Jl. Basuki Rahmat No. 21, Kec. Lamongan, Kab. Lamongan, Jawa Timur 62211',
+    phone: '0322 321 456',
+    hours: 'Senin–Jumat, 08.00–15.00 WIB',
+    capacity: 2000,
+    wastes: ['Sampah basah', 'Sampah kebun'],
+    lat: -7.1166,
+    lng: 112.4167,
+    tx: { bso: 64, produksi: 24, pengambilan: 20 },
+  },
+  {
+    id: 'PKG-0003',
+    name: mitraSites[2],
+    mitra: 'Mitra Tuban Kanwil I',
+    address: 'Jl. Dr. Wahidin Sudirohusodo No. 8, Kec. Tuban, Kab. Tuban, Jawa Timur 62315',
+    phone: '0356 322 789',
+    hours: 'Senin–Sabtu, 07.30–15.30 WIB',
+    capacity: 2500,
+    wastes: ['Sampah basah', 'Sampah kebun', 'Sampah pasar'],
+    lat: -6.8976,
+    lng: 112.0647,
+    tx: { bso: 51, produksi: 22, pengambilan: 18 },
+  },
+]
+
+const mapsLink = (station: Station) => `https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}`
+
+function StationMap({
+  stations,
+  selectedId,
+  onSelect,
+}: {
+  stations: Station[]
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+}) {
+  const box = useRef<HTMLDivElement>(null)
+  const map = useRef<L.Map | null>(null)
+  const layer = useRef<L.LayerGroup | null>(null)
+  const pick = useRef(onSelect)
+  pick.current = onSelect
+
+  useEffect(() => {
+    if (!box.current) return
+    const instance = L.map(box.current).setView([-7.3, 112], 8)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap',
+    }).addTo(instance)
+    layer.current = L.layerGroup().addTo(instance)
+    map.current = instance
+    const timer = setTimeout(() => instance.invalidateSize(), 200)
+    return () => {
+      clearTimeout(timer)
+      instance.remove()
+      map.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const group = layer.current
+    if (!group) return
+    group.clearLayers()
+    stations.forEach((station) => {
+      const icon = L.divIcon({
+        className: 'sa-pin-wrap',
+        html: `<span class="sa-pin${station.id === selectedId ? ' on' : ''}"></span>`,
+        iconSize: [30, 38],
+        iconAnchor: [15, 36],
+      })
+      const label = document.createElement('span')
+      label.textContent = station.name
+      L.marker([station.lat, station.lng], { icon, title: station.name })
+        .addTo(group)
+        .bindTooltip(label, { direction: 'top', offset: [0, -30] })
+        .on('click', () => pick.current(station.id === selectedId ? null : station.id))
+    })
+  }, [stations, selectedId])
+
+  useEffect(() => {
+    const instance = map.current
+    if (!instance) return
+    const chosen = stations.find((station) => station.id === selectedId)
+    if (chosen) instance.flyTo([chosen.lat, chosen.lng], 14, { duration: 0.6 })
+    else if (stations.length)
+      instance.fitBounds(L.latLngBounds(stations.map((station) => [station.lat, station.lng] as [number, number])), {
+        padding: [40, 40],
+        maxZoom: 11,
+      })
+  }, [selectedId, stations])
+
+  return <div ref={box} className="sa-map" role="region" aria-label="Peta sebaran kompos station" />
+}
+
+function StationForm({
+  initial,
+  submitLabel,
+  onSubmit,
+}: {
+  initial?: Station
+  submitLabel: string
+  onSubmit: (draft: StationDraft) => void
+}) {
+  const [form, setForm] = useState({
+    name: initial?.name ?? '',
+    mitra: initial?.mitra ?? '',
+    address: initial?.address ?? '',
+    phone: initial?.phone ?? '',
+    hours: initial?.hours ?? '',
+    capacity: String(initial?.capacity ?? 2000),
+    lat: initial ? String(initial.lat) : '',
+    lng: initial ? String(initial.lng) : '',
+    wastes: initial?.wastes ?? [],
+  })
+  const set = (key: 'name' | 'mitra' | 'address' | 'phone' | 'hours') =>
+    (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setForm((current) => ({ ...current, [key]: event.target.value }))
+  const capacity = Number(form.capacity.replace(',', '.'))
+  const lat = Number(form.lat.replace(',', '.'))
+  const lng = Number(form.lng.replace(',', '.'))
+  const valid =
+    [form.name, form.mitra, form.address, form.phone, form.hours].every((value) => value.trim()) &&
+    capacity > 0 &&
+    form.lat.trim() !== '' &&
+    form.lng.trim() !== '' &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180 &&
+    form.wastes.length > 0
+
+  return (
+    <div className="mt-form">
+      <label className="mt-field">
+        <span>Nama kompos station</span>
+        <input value={form.name} onChange={set('name')} placeholder="PKG Cabang ..." />
+      </label>
+      <label className="mt-field">
+        <span>Nama mitra</span>
+        <input value={form.mitra} onChange={set('mitra')} placeholder="Mitra ..." />
+      </label>
+      <label className="mt-field">
+        <span>Alamat lokasi</span>
+        <textarea rows={2} value={form.address} onChange={set('address')} />
+      </label>
+      <div className="mt-field">
+        <span>Titik koordinat</span>
+        <div className="sa-coords">
+          <input
+            inputMode="decimal"
+            placeholder="Latitude, mis. -7.1502"
+            aria-label="Latitude"
+            value={form.lat}
+            onChange={(event) => setForm((c) => ({ ...c, lat: event.target.value.replace(/[^0-9.,-]/g, '') }))}
+          />
+          <input
+            inputMode="decimal"
+            placeholder="Longitude, mis. 111.8817"
+            aria-label="Longitude"
+            value={form.lng}
+            onChange={(event) => setForm((c) => ({ ...c, lng: event.target.value.replace(/[^0-9.,-]/g, '') }))}
+          />
+        </div>
+        <small>Salin dari Google Maps: tekan lama pada titik lokasi, lalu salin angka koordinatnya.</small>
+      </div>
+      <label className="mt-field">
+        <span>No. telepon</span>
+        <input inputMode="tel" value={form.phone} onChange={set('phone')} placeholder="0353 881 234" />
+      </label>
+      <label className="mt-field">
+        <span>Jadwal buka</span>
+        <input value={form.hours} onChange={set('hours')} placeholder="Senin–Sabtu, 08.00–16.00 WIB" />
+      </label>
+      <label className="mt-field">
+        <span>Kapasitas (kg/siklus)</span>
+        <div className="mt-input-unit">
+          <input
+            inputMode="decimal"
+            value={form.capacity}
+            onChange={(event) => setForm((c) => ({ ...c, capacity: event.target.value.replace(/[^0-9.,]/g, '') }))}
+          />
+          <i>kg</i>
+        </div>
+      </label>
+      <div className="mt-field">
+        <span>Jenis sampah yang diterima</span>
+        <div className="sa-chips">
+          {stationWastes.map((item) => {
+            const on = form.wastes.includes(item)
+            return (
+              <button
+                key={item}
+                type="button"
+                className={on ? 'on' : ''}
+                aria-pressed={on}
+                onClick={() =>
+                  setForm((c) => ({
+                    ...c,
+                    wastes: on ? c.wastes.filter((w) => w !== item) : [...c.wastes, item],
+                  }))
+                }
+              >
+                {on && <Icon name="check" size={14} strokeWidth={3} />} {item}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <button
+        className="mt-cta"
+        disabled={!valid}
+        onClick={() =>
+          onSubmit({
+            name: form.name.trim(),
+            mitra: form.mitra.trim(),
+            address: form.address.trim(),
+            phone: form.phone.trim(),
+            hours: form.hours.trim(),
+            capacity,
+            wastes: stationWastes.filter((item) => form.wastes.includes(item)),
+            lat,
+            lng,
+          })
+        }
+      >
+        {submitLabel}
+      </button>
+    </div>
+  )
+}
+
+function AdminStations({
+  stations,
+  setStations,
+}: {
+  stations: Station[]
+  setStations: React.Dispatch<React.SetStateAction<Station[]>>
+}) {
+  const [view, setView] = useState<'peta' | 'list' | 'tambah'>('peta')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [editing, setEditing] = useState<Station | null>(null)
+  const [deleting, setDeleting] = useState<Station | null>(null)
+  const [notice, setNotice] = useState('')
+  const [query, setQuery] = useState('')
+  const needle = query.trim().toLowerCase()
+  const shown = stations.filter(
+    (item) =>
+      !needle || [item.name, item.mitra, item.id, item.address].some((field) => field.toLowerCase().includes(needle)),
+  )
+  const search = (
+    <label className="mt-search">
+      <Icon name="search" size={20} />
+      <input
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder="Cari nama kompos station"
+        aria-label="Cari kompos station"
+      />
+      {query && (
+        <button onClick={() => setQuery('')} aria-label="Hapus pencarian">
+          Hapus
+        </button>
+      )}
+    </label>
+  )
+  const emptyText = needle ? 'Kompos station tidak ditemukan.' : 'Belum ada kompos station.'
+
+  function add(draft: StationDraft) {
+    const next = Math.max(0, ...stations.map((item) => Number(item.id.slice(4)))) + 1
+    const id = `PKG-${String(next).padStart(4, '0')}`
+    setStations((list) => [...list, { ...draft, id, tx: { bso: 0, produksi: 0, pengambilan: 0 } }])
+    setNotice(`${draft.name} ditambahkan.`)
+    setView('list')
+  }
+
+  function save(draft: StationDraft) {
+    if (!editing) return
+    setStations((list) => list.map((item) => (item.id === editing.id ? { ...item, ...draft } : item)))
+    setNotice(`Data ${draft.name} diperbarui.`)
+    setEditing(null)
+  }
+
+  function remove() {
+    if (!deleting) return
+    setStations((list) => list.filter((item) => item.id !== deleting.id))
+    if (selectedId === deleting.id) setSelectedId(null)
+    setNotice(`${deleting.name} dihapus.`)
+    setDeleting(null)
+  }
+
+  const txTotal = deleting ? deleting.tx.bso + deleting.tx.produksi + deleting.tx.pengambilan : 0
+
+  return (
+    <>
+      <div className="mt-graph-head">
+        <div className="sa-head">
+          <h1>Kompos Station</h1>
+          <small>Sebaran program · {stations.length} lokasi</small>
+        </div>
+      </div>
+      {notice && (
+        <p className="mt-saved" role="status">
+          <Icon name="check" size={16} strokeWidth={2.6} /> {notice}
+        </p>
+      )}
+      <div className="mt-trend-filter">
+        <div className="mt-toggle wide" role="tablist" aria-label="Tampilan kompos station">
+          {(
+            [
+              ['peta', 'Peta'],
+              ['list', 'List'],
+              ['tambah', 'Tambah Data'],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={view === key}
+              className={view === key ? 'active' : ''}
+              onClick={() => {
+                setView(key)
+                setNotice('')
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {view === 'peta' && (
+        <>
+          {search}
+          <section className="mt-panel sa-map-panel">
+            <StationMap stations={shown} selectedId={selectedId} onSelect={setSelectedId} />
+          </section>
+          <section className="sa-st-list" aria-label="Daftar lokasi">
+            {shown.length === 0 && <p className="mt-hint">{emptyText}</p>}
+            {shown.map((station) => (
+              <div key={station.id} className={`sa-st-card${selectedId === station.id ? ' on' : ''}`}>
+                <button
+                  className="sa-st-main"
+                  onClick={() => setSelectedId(selectedId === station.id ? null : station.id)}
+                  aria-pressed={selectedId === station.id}
+                >
+                  <span className="mt-stat-icon">
+                    <Icon name="pin" size={18} />
+                  </span>
+                  <span className="mt-member-info">
+                    <strong>{station.name}</strong>
+                    <small>{station.address}</small>
+                  </span>
+                </button>
+                <a className="sa-gmaps" href={mapsLink(station)} target="_blank" rel="noopener noreferrer">
+                  <Icon name="external" size={15} /> Buka di Google Maps
+                </a>
+              </div>
+            ))}
+          </section>
+        </>
+      )}
+
+      {view === 'list' && (
+        <>
+        {search}
+        <section className="sa-st-list" aria-label="List kompos station">
+          {shown.length === 0 && (
+            <p className="mt-hint">{needle ? emptyText : 'Belum ada kompos station. Tambahkan lewat tab Tambah Data.'}</p>
+          )}
+          {shown.map((station) => (
+            <article key={station.id} className="mt-panel sa-detail">
+              <header>
+                <div>
+                  <strong>{station.name}</strong>
+                  <small>{station.id}</small>
+                </div>
+              </header>
+              <dl>
+                <div>
+                  <dt>Nama mitra</dt>
+                  <dd>{station.mitra}</dd>
+                </div>
+                <div>
+                  <dt>Alamat lokasi</dt>
+                  <dd>{station.address}</dd>
+                </div>
+                <div>
+                  <dt>No. telepon</dt>
+                  <dd>
+                    <a href={`tel:${station.phone.replace(/\s/g, '')}`}>{station.phone}</a>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Jadwal buka</dt>
+                  <dd>{station.hours}</dd>
+                </div>
+                <div>
+                  <dt>Kapasitas</dt>
+                  <dd>{idNumber(station.capacity, 0)} kg/siklus</dd>
+                </div>
+                <div>
+                  <dt>Jenis sampah diterima</dt>
+                  <dd>
+                    <span className="sa-tags">
+                      {station.wastes.map((item) => (
+                        <i key={item}>{item}</i>
+                      ))}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+              <div className="sa-actions">
+                <button onClick={() => setEditing(station)}>
+                  <Icon name="edit" size={16} /> Edit
+                </button>
+                <button className="danger" onClick={() => setDeleting(station)}>
+                  <Icon name="trash" size={16} /> Hapus
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+        </>
+      )}
+
+      {view === 'tambah' && (
+        <section className="mt-panel">
+          <h2>Tambah kompos station</h2>
+          <StationForm submitLabel="Tambah kompos station" onSubmit={add} />
+        </section>
+      )}
+
+      {editing && (
+        <div className="modal-backdrop" onClick={() => setEditing(null)}>
+          <section className="promo-sheet gp-sheet mt-picker mt-scroll" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setEditing(null)} aria-label="Tutup" />
+            <h2>Edit kompos station</h2>
+            <StationForm key={editing.id} initial={editing} submitLabel="Simpan perubahan" onSubmit={save} />
+          </section>
+        </div>
+      )}
+
+      {deleting && (
+        <div className="modal-backdrop" onClick={() => setDeleting(null)}>
+          <section className="promo-sheet gp-sheet" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setDeleting(null)} aria-label="Tutup" />
+            <h2>Hapus {deleting.name}?</h2>
+            {txTotal > 0 ? (
+              <>
+                <p>
+                  Kompos station ini memiliki <b>{txTotal} data transaksi</b>. Seluruh data tersebut akan ikut
+                  terhapus dan tidak dapat dikembalikan.
+                </p>
+                <ul className="sa-tx">
+                  <li>
+                    <span>Setoran BSO</span>
+                    <b>{deleting.tx.bso}</b>
+                  </li>
+                  <li>
+                    <span>Produksi</span>
+                    <b>{deleting.tx.produksi}</b>
+                  </li>
+                  <li>
+                    <span>Pengambilan</span>
+                    <b>{deleting.tx.pengambilan}</b>
+                  </li>
+                </ul>
+              </>
+            ) : (
+              <p>Kompos station ini belum memiliki data transaksi. Data yang dihapus tidak dapat dikembalikan.</p>
+            )}
+            <p>Apakah Anda yakin ingin menghapus?</p>
+            <div className="gp-confirm sheet-confirm">
+              <div>
+                <button onClick={() => setDeleting(null)}>Batal</button>
+                <button className="strong danger" onClick={remove}>
+                  Ya, hapus
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ---- Pengguna: member, mitra, petugas lapangan, admin ----
+const userRoles = ['Member Gladi', 'Mitra Kompos', 'Petugas Lapangan', 'Admin'] as const
+type UserRole = (typeof userRoles)[number]
+
+type AppUser = {
+  id: string
+  name: string
+  role: UserRole
+  phone: string
+  email: string
+  stationId: string
+}
+
+const userPrefix: Record<UserRole, string> = {
+  'Member Gladi': 'GP-',
+  'Mitra Kompos': 'MK-',
+  'Petugas Lapangan': 'PL-',
+  Admin: 'AD-',
+}
+const userId = (role: UserRole, n: number) => `${userPrefix[role]}${String(n).padStart(role === 'Member Gladi' ? 5 : 3, '0')}`
+
+// Data contoh. Jumlah member per station: Bojonegoro 18 (sama dengan role Mitra), Lamongan 27, Tuban 21.
+const seedUsers: AppUser[] = (() => {
+  const first = ['Ahmad', 'Siti', 'Budi', 'Dewi', 'Agus', 'Rina', 'Hendra', 'Wulan', 'Yusuf', 'Lestari', 'Bambang', 'Fitri', 'Rudi', 'Maya', 'Dedi', 'Sari', 'Imam', 'Nia', 'Teguh', 'Ratna', 'Fajar', 'Anisa', 'Joko', 'Mega', 'Slamet', 'Putri', 'Hadi', 'Indah', 'Wawan']
+  const last = ['Santoso', 'Wijaya', 'Rahayu', 'Hidayat', 'Kurniawan', 'Setiawan', 'Lestari', 'Nugroho', 'Saputra', 'Pratama', 'Yulianto', 'Mulyani', 'Hartono', 'Susanti', 'Purnomo']
+  const phone = (i: number) => `0812-${String(1000 + ((i * 37) % 9000))}-${String(1000 + ((i * 91) % 9000))}`
+  const emailOf = (name: string) => `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@gmail.com`
+  const list: AppUser[] = []
+  mitraMembers.forEach((member, index) =>
+    list.push({ id: member.code, name: member.name, role: 'Member Gladi', phone: phone(index), email: emailOf(member.name), stationId: 'PKG-0001' }),
+  )
+  let n = mitraMembers.length
+  ;[
+    ['PKG-0002', 27],
+    ['PKG-0003', 21],
+  ].forEach(([stationId, count]) => {
+    for (let i = 0; i < (count as number); i++) {
+      n += 1
+      const name = `${first[(n * 5) % first.length]} ${last[(n * 7 + 3) % last.length]}`
+      list.push({ id: userId('Member Gladi', n), name, role: 'Member Gladi', phone: phone(n), email: emailOf(name), stationId: stationId as string })
+    }
+  })
+  list.push(
+    { id: 'MK-001', name: 'Mitra Bojonegoro Kanwil I', role: 'Mitra Kompos', phone: '0353 881 234', email: 'mitra.bojonegoro@agrifertile.com', stationId: 'PKG-0001' },
+    { id: 'MK-002', name: 'Mitra Lamongan Kanwil II', role: 'Mitra Kompos', phone: '0322 321 456', email: 'mitra.lamongan@agrifertile.com', stationId: 'PKG-0002' },
+    { id: 'MK-003', name: 'Mitra Tuban Kanwil I', role: 'Mitra Kompos', phone: '0356 322 789', email: 'mitra.tuban@agrifertile.com', stationId: 'PKG-0003' },
+    { id: 'PL-001', name: 'Hendro Prasetyo', role: 'Petugas Lapangan', phone: '0813-2201-4455', email: 'hendro.prasetyo@agrifertile.com', stationId: 'PKG-0001' },
+    { id: 'PL-002', name: 'Yani Maharani', role: 'Petugas Lapangan', phone: '0813-5530-2189', email: 'yani.maharani@agrifertile.com', stationId: 'PKG-0002' },
+    { id: 'PL-003', name: 'Rizal Fauzan', role: 'Petugas Lapangan', phone: '0813-7741-9023', email: 'rizal.fauzan@agrifertile.com', stationId: 'PKG-0003' },
+    { id: 'PL-004', name: 'Dian Kusuma', role: 'Petugas Lapangan', phone: '0813-6612-3370', email: 'dian.kusuma@agrifertile.com', stationId: 'PKG-0001' },
+    { id: 'AD-001', name: 'Nadia Putri', role: 'Admin', phone: '0811-2345-6789', email: 'nadia.putri@agrifertile.com', stationId: '' },
+    { id: 'AD-002', name: 'Rangga Mahendra', role: 'Admin', phone: '0811-9876-5432', email: 'rangga.mahendra@agrifertile.com', stationId: '' },
+  )
+  return list
+})()
+
+type UserDraft = Omit<AppUser, 'id'>
+
+const exportHeader = ['Kode', 'Nama', 'Role', 'No. telepon', 'Email', 'Kompos station']
+
+function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+async function usersToXlsx(rows: string[][]) {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser')
+  const head = exportHeader.map((value) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E7F0D0' }))
+  return writeXlsxFile(
+    [head, ...rows],
+    { sheet: 'Pengguna', columns: [{ width: 12 }, { width: 28 }, { width: 18 }, { width: 18 }, { width: 34 }, { width: 26 }] },
+  ).toBlob()
+}
+
+async function usersToPdf(rows: string[][], subtitle: string) {
+  const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  doc.setFontSize(15)
+  doc.text('Daftar Pengguna GladiPoint', 40, 42)
+  doc.setFontSize(9)
+  doc.setTextColor(110)
+  doc.text(subtitle, 40, 58)
+  autoTable(doc, {
+    startY: 72,
+    head: [exportHeader],
+    body: rows,
+    margin: { left: 40, right: 40 },
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [31, 77, 44] },
+    alternateRowStyles: { fillColor: [247, 250, 238] },
+  })
+  return doc.output('blob')
+}
+
+function UserForm({
+  initial,
+  stations,
+  submitLabel,
+  onSubmit,
+}: {
+  initial?: AppUser
+  stations: Station[]
+  submitLabel: string
+  onSubmit: (draft: UserDraft) => void
+}) {
+  const [form, setForm] = useState({
+    name: initial?.name ?? '',
+    role: initial?.role ?? ('Member Gladi' as UserRole),
+    phone: initial?.phone ?? '',
+    email: initial?.email ?? '',
+    stationId: initial?.stationId ?? stations[0]?.id ?? '',
+  })
+  const needStation = form.role !== 'Admin'
+  const valid =
+    form.name.trim() !== '' &&
+    form.phone.trim() !== '' &&
+    /^\S+@\S+\.\S+$/.test(form.email.trim()) &&
+    (!needStation || stations.some((item) => item.id === form.stationId))
+
+  return (
+    <div className="mt-form">
+      <label className="mt-field">
+        <span>Nama lengkap</span>
+        <input value={form.name} onChange={(event) => setForm((c) => ({ ...c, name: event.target.value }))} />
+      </label>
+      <div className="mt-field">
+        <span>Role</span>
+        <div className="sa-chips">
+          {userRoles.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={form.role === item ? 'on' : ''}
+              aria-pressed={form.role === item}
+              onClick={() => setForm((c) => ({ ...c, role: item }))}
+            >
+              {form.role === item && <Icon name="check" size={14} strokeWidth={3} />} {item}
+            </button>
+          ))}
+        </div>
+      </div>
+      <label className="mt-field">
+        <span>No. telepon</span>
+        <input inputMode="tel" value={form.phone} onChange={(event) => setForm((c) => ({ ...c, phone: event.target.value }))} />
+      </label>
+      <label className="mt-field">
+        <span>Email</span>
+        <input type="email" value={form.email} onChange={(event) => setForm((c) => ({ ...c, email: event.target.value }))} />
+      </label>
+      {needStation ? (
+        <label className="mt-field">
+          <span>Kompos station</span>
+          <select value={form.stationId} onChange={(event) => setForm((c) => ({ ...c, stationId: event.target.value }))}>
+            {stations.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="mt-hint">Admin memiliki akses ke seluruh cakupan.</p>
+      )}
+      <button
+        className="mt-cta"
+        disabled={!valid}
+        onClick={() =>
+          onSubmit({
+            name: form.name.trim(),
+            role: form.role,
+            phone: form.phone.trim(),
+            email: form.email.trim(),
+            stationId: needStation ? form.stationId : '',
+          })
+        }
+      >
+        {submitLabel}
+      </button>
+    </div>
+  )
+}
+
+function AdminUsers({
+  users,
+  setUsers,
+  stations,
+}: {
+  users: AppUser[]
+  setUsers: React.Dispatch<React.SetStateAction<AppUser[]>>
+  stations: Station[]
+}) {
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<'Semua' | UserRole>('Semua')
+  const [adding, setAdding] = useState(false)
+  const [open, setOpen] = useState<AppUser | null>(null)
+  const [editing, setEditing] = useState<AppUser | null>(null)
+  const [deleting, setDeleting] = useState<AppUser | null>(null)
+  const [notice, setNotice] = useState('')
+  const [exportSheet, setExportSheet] = useState(false)
+  const [busy, setBusy] = useState('')
+  const needle = query.trim().toLowerCase()
+  const stationName = (id: string) => (id ? (stations.find((item) => item.id === id)?.name ?? 'Station dihapus') : 'Seluruh cakupan')
+  const shown = users.filter(
+    (item) =>
+      (filter === 'Semua' || item.role === filter) &&
+      (!needle || [item.name, item.id, item.phone, item.email].some((field) => field.toLowerCase().includes(needle))),
+  )
+
+  async function exportAs(kind: 'xlsx' | 'pdf') {
+    setBusy(kind)
+    try {
+      const rows = shown.map((user) => [user.id, user.name, user.role, user.phone, user.email, stationName(user.stationId)])
+      const today = new Date()
+      const stamp = today.toISOString().slice(0, 10)
+      const subtitle = [
+        `Role: ${filter}`,
+        needle ? `Pencarian: "${query.trim()}"` : '',
+        `${rows.length} pengguna`,
+        `Dibuat ${today.getDate()} ${adminMonths[today.getMonth()]} ${today.getFullYear()}`,
+      ]
+        .filter(Boolean)
+        .join('  ·  ')
+      const blob = kind === 'xlsx' ? await usersToXlsx(rows) : await usersToPdf(rows, subtitle)
+      saveBlob(blob, `pengguna-gladipoint-${stamp}.${kind}`)
+      setNotice(`${rows.length} pengguna diekspor ke ${kind === 'xlsx' ? 'Excel' : 'PDF'}.`)
+      setExportSheet(false)
+    } catch {
+      setNotice('Ekspor gagal. Coba lagi.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  function add(draft: UserDraft) {
+    const prefix = userPrefix[draft.role]
+    const next = Math.max(0, ...users.filter((item) => item.id.startsWith(prefix)).map((item) => Number(item.id.slice(prefix.length)))) + 1
+    setUsers((list) => [{ ...draft, id: userId(draft.role, next) }, ...list])
+    setNotice(`${draft.name} ditambahkan sebagai ${draft.role}.`)
+    setAdding(false)
+  }
+
+  function save(draft: UserDraft) {
+    if (!editing) return
+    setUsers((list) => list.map((item) => (item.id === editing.id ? { ...item, ...draft } : item)))
+    setNotice(`Data ${draft.name} diperbarui.`)
+    setEditing(null)
+    setOpen(null)
+  }
+
+  function remove() {
+    if (!deleting) return
+    setUsers((list) => list.filter((item) => item.id !== deleting.id))
+    setNotice(`${deleting.name} dihapus.`)
+    setDeleting(null)
+    setOpen(null)
+  }
+
+  const txCount = deleting ? mitraDeposits.filter((item) => item.code === deleting.id).length : 0
+  const roleIcon: Record<UserRole, string> = {
+    'Member Gladi': 'users',
+    'Mitra Kompos': 'store',
+    'Petugas Lapangan': 'clipboard',
+    Admin: 'shield',
+  }
+
+  return (
+    <>
+      <div className="mt-graph-head">
+        <div className="sa-head">
+          <h1>Pengguna</h1>
+          <small>{users.length} pengguna terdaftar</small>
+        </div>
+        <button className="mt-period light" onClick={() => setExportSheet(true)} aria-label="Ekspor data pengguna">
+          <Icon name="download" size={15} />
+          <span>Ekspor</span>
+        </button>
+      </div>
+      {notice && (
+        <p className="mt-saved" role="status">
+          <Icon name="check" size={16} strokeWidth={2.6} /> {notice}
+        </p>
+      )}
+      <div className="sa-counts" aria-label="Ringkasan pengguna per role">
+        {userRoles.map((item) => (
+          <div key={item}>
+            <span className="mt-stat-icon">
+              <Icon name={roleIcon[item]} size={18} />
+            </span>
+            <p>
+              <small>{item}</small>
+              <strong>{idNumber(users.filter((user) => user.role === item).length, 0)}</strong>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <button className="mt-cta first" onClick={() => setAdding(true)}>
+        <Icon name="plus" size={22} strokeWidth={2.4} /> Tambah pengguna
+      </button>
+
+      <label className="mt-search">
+        <Icon name="search" size={20} />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Cari nama, kode, telepon, atau email"
+          aria-label="Cari pengguna"
+        />
+        {query && (
+          <button onClick={() => setQuery('')} aria-label="Hapus pencarian">
+            Hapus
+          </button>
+        )}
+      </label>
+      <div className="sa-chips scroll" role="group" aria-label="Filter role">
+        {(['Semua', ...userRoles] as const).map((item) => (
+          <button
+            key={item}
+            className={filter === item ? 'on' : ''}
+            aria-pressed={filter === item}
+            onClick={() => setFilter(item)}
+          >
+            {item === 'Semua' ? 'Semua' : item}
+          </button>
+        ))}
+      </div>
+
+      <section className="mt-panel mt-list">
+        {shown.length === 0 && <p className="mt-hint">Pengguna tidak ditemukan.</p>}
+        {shown.map((user) => (
+          <button key={user.id} className="mt-member" onClick={() => setOpen(user)}>
+            <span className="mt-avatar">{memberInitials(user.name)}</span>
+            <span className="mt-member-info">
+              <strong>{user.name}</strong>
+              <small>
+                {user.role} · {user.id}
+              </small>
+            </span>
+            <Icon name="chevron" size={16} />
+          </button>
+        ))}
+      </section>
+
+      {open && !editing && !deleting && (
+        <div className="modal-backdrop" onClick={() => setOpen(null)}>
+          <section className="promo-sheet gp-sheet mt-picker mt-scroll" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setOpen(null)} aria-label="Tutup" />
+            <div className="mt-member-head">
+              <span className="mt-avatar big">{memberInitials(open.name)}</span>
+              <div>
+                <h2>{open.name}</h2>
+                <small>{open.id}</small>
+              </div>
+            </div>
+            <div className="sa-detail sa-user-detail">
+              <dl>
+                <div>
+                  <dt>Role</dt>
+                  <dd>
+                    <span className="sa-tags">
+                      <i>{open.role}</i>
+                    </span>
+                  </dd>
+                </div>
+                <div>
+                  <dt>No. telepon</dt>
+                  <dd>
+                    <a href={`tel:${open.phone.replace(/[\s-]/g, '')}`}>{open.phone}</a>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Email</dt>
+                  <dd>{open.email}</dd>
+                </div>
+                <div>
+                  <dt>Kompos station</dt>
+                  <dd>{stationName(open.stationId)}</dd>
+                </div>
+              </dl>
+            </div>
+            <div className="sa-actions">
+              <button onClick={() => setEditing(open)}>
+                <Icon name="edit" size={16} /> Edit
+              </button>
+              <button className="danger" onClick={() => setDeleting(open)}>
+                <Icon name="trash" size={16} /> Hapus
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {exportSheet && (
+        <ExportSheet
+          note={`${shown.length} pengguna akan diekspor, sesuai filter role dan pencarian saat ini.`}
+          busy={busy}
+          disabled={shown.length === 0}
+          onExport={exportAs}
+          onClose={() => setExportSheet(false)}
+        />
+      )}
+
+      {adding && (
+        <div className="modal-backdrop" onClick={() => setAdding(false)}>
+          <section className="promo-sheet gp-sheet mt-picker mt-scroll" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setAdding(false)} aria-label="Tutup" />
+            <h2>Tambah pengguna</h2>
+            <UserForm stations={stations} submitLabel="Tambah pengguna" onSubmit={add} />
+          </section>
+        </div>
+      )}
+
+      {editing && (
+        <div className="modal-backdrop" onClick={() => setEditing(null)}>
+          <section className="promo-sheet gp-sheet mt-picker mt-scroll" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setEditing(null)} aria-label="Tutup" />
+            <h2>Edit pengguna</h2>
+            <UserForm key={editing.id} initial={editing} stations={stations} submitLabel="Simpan perubahan" onSubmit={save} />
+          </section>
+        </div>
+      )}
+
+      {deleting && (
+        <div className="modal-backdrop" onClick={() => setDeleting(null)}>
+          <section className="promo-sheet gp-sheet" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setDeleting(null)} aria-label="Tutup" />
+            <h2>Hapus {deleting.name}?</h2>
+            <p>
+              {txCount > 0 ? (
+                <>
+                  Pengguna ini memiliki <b>{txCount} data transaksi BSO</b>. Data tersebut akan ikut terhapus dan tidak
+                  dapat dikembalikan.
+                </>
+              ) : (
+                'Pengguna ini belum memiliki data transaksi. Akun yang dihapus tidak dapat dikembalikan.'
+              )}
+            </p>
+            <p>Apakah Anda yakin ingin menghapus?</p>
+            <div className="gp-confirm sheet-confirm">
+              <div>
+                <button onClick={() => setDeleting(null)}>Batal</button>
+                <button className="strong danger" onClick={remove}>
+                  Ya, hapus
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ---- Detail laporan: stok kompos dan NOC tersedia per lokasi mitra ----
+// Bojonegoro memakai data nyata role Mitra; lokasi lain berupa data contoh (kelipatan dari data Mitra).
+const stockFactor: Record<string, number> = { 'PKG-0001': 1, 'PKG-0002': 1.4, 'PKG-0003': 0.8 }
+
+function stationStock(station: Station, period: string, productions: Production[], pickups: Pickup[]) {
+  const factor = stockFactor[station.id] ?? 0
+  const base = mitraSummary(period, productions, pickups)
+  const scale = (value: number) => Math.round(value * factor * 10) / 10
+  const history = pickups
+    .filter((item) => period === 'Semua bulan' || periodOf(item.date) === period)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .map((item) => ({ id: item.id, date: item.date, kompos: scale(item.kompos ?? 0), noc: scale(item.noc ?? 0), taker: item.taker }))
+    .filter((item) => item.kompos > 0 || item.noc > 0)
+  return {
+    kompos: scale(base.tersedia),
+    noc: scale(base.nocTersedia),
+    diambilKompos: scale(base.diambil),
+    diambilNoc: scale(base.nocDiambil),
+    last: factor > 0 ? base.lastTersedia : '',
+    history,
+  }
+}
+
+const longDate = (iso: string) => `${Number(iso.slice(8, 10))} ${monthNames[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`
+
+// ---- Ekspor laporan stok (Excel / PDF), berbeda isi untuk tab Ringkasan dan Grafik ----
+type ReportStationRow = { station: Station; stock: ReturnType<typeof stationStock> }
+type ReportData = {
+  rows: ReportStationRow[]
+  totalKompos: number
+  totalNoc: number
+  diambilKompos: number
+  diambilNoc: number
+  last: string
+  months: { name: string; kompos: number; noc: number }[]
+  history: { lokasi: string; date: string; kompos: number; noc: number; taker: string }[]
+}
+
+const shortStation = (name: string) => name.replace('PKG Cabang ', '')
+
+async function reportToXlsx(view: 'ringkasan' | 'grafik', data: ReportData, year: number) {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser')
+  const head = (labels: string[]) => labels.map((value) => ({ value, fontWeight: 'bold' as const, backgroundColor: '#E7F0D0' }))
+  if (view === 'ringkasan') {
+    const body = data.rows.map(({ station, stock }) => [
+      station.name,
+      station.mitra,
+      stock.kompos,
+      stock.noc,
+      stock.diambilKompos,
+      stock.diambilNoc,
+      stock.last ? longDate(stock.last) : '-',
+    ])
+    const total = [
+      { value: 'Total', fontWeight: 'bold' as const },
+      '',
+      { value: data.totalKompos, fontWeight: 'bold' as const },
+      { value: data.totalNoc, fontWeight: 'bold' as const },
+      { value: data.diambilKompos, fontWeight: 'bold' as const },
+      { value: data.diambilNoc, fontWeight: 'bold' as const },
+      data.last ? longDate(data.last) : '-',
+    ]
+    return writeXlsxFile([
+      {
+        sheet: 'Stok per lokasi',
+        data: [head(['Lokasi', 'Mitra', 'Kompos tersedia (kg)', 'NOC tersedia (L)', 'Kompos diambil (kg)', 'NOC diambil (L)', 'Update terakhir']), ...body, total],
+        columns: [{ width: 26 }, { width: 28 }, { width: 20 }, { width: 18 }, { width: 20 }, { width: 18 }, { width: 18 }],
+      },
+      {
+        sheet: 'Riwayat diambil',
+        data: [
+          head(['Lokasi', 'Tanggal', 'Kompos (kg)', 'NOC (L)', 'Pengambil']),
+          ...data.history.map((item) => [item.lokasi, longDate(item.date), item.kompos, item.noc, item.taker]),
+        ],
+        columns: [{ width: 26 }, { width: 16 }, { width: 14 }, { width: 12 }, { width: 26 }],
+      },
+    ]).toBlob()
+  }
+  return writeXlsxFile([
+    {
+      sheet: 'Per lokasi',
+      data: [
+        head(['Lokasi', 'Kompos tersedia (kg)', 'Kompos diambil (kg)', 'NOC tersedia (L)', 'NOC diambil (L)']),
+        ...data.rows.map(({ station, stock }) => [station.name, stock.kompos, stock.diambilKompos, stock.noc, stock.diambilNoc]),
+      ],
+      columns: [{ width: 26 }, { width: 22 }, { width: 22 }, { width: 20 }, { width: 18 }],
+    },
+    {
+      sheet: `Tren ${year}`,
+      data: [head(['Bulan', 'Kompos tersedia (kg)', 'NOC tersedia (L)']), ...data.months.map((m) => [m.name, m.kompos, m.noc])],
+      columns: [{ width: 12 }, { width: 22 }, { width: 20 }],
+    },
+  ]).toBlob()
+}
+
+type PdfDoc = import('jspdf').jsPDF
+
+function drawBars(
+  doc: PdfDoc,
+  opts: { x: number; y: number; w: number; h: number; title: string; labels: string[]; values: number[]; highlight?: number },
+) {
+  const { x, y, w, h, title, labels, values, highlight } = opts
+  doc.setFontSize(10)
+  doc.setTextColor(20, 48, 31)
+  doc.text(title, x, y)
+  const base = y + h - 14
+  const top = y + 22
+  const plot = base - top
+  const max = Math.max(...values, 1)
+  const gap = values.length > 6 ? 5 : 14
+  const bw = (w - gap * (values.length - 1)) / values.length
+  doc.setDrawColor(210, 214, 206)
+  doc.line(x, base, x + w, base)
+  values.forEach((value, index) => {
+    const bh = value > 0 ? Math.max((value / max) * plot, 2) : 0
+    const bx = x + index * (bw + gap)
+    const on = highlight === undefined || highlight === index
+    if (on) doc.setFillColor(31, 77, 44)
+    else doc.setFillColor(185, 201, 166)
+    doc.rect(bx, base - bh, bw, bh, 'F')
+    doc.setFontSize(7)
+    doc.setTextColor(70)
+    if (on) doc.text(idNumber(value), bx + bw / 2, base - bh - 3, { align: 'center' })
+    doc.text(labels[index], bx + bw / 2, base + 10, { align: 'center' })
+  })
+}
+
+async function reportToPdf(view: 'ringkasan' | 'grafik', data: ReportData, meta: { subtitle: string; year: number; selected: number }) {
+  const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
+  const tableStyle = {
+    margin: { left: 40, right: 40 },
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [31, 77, 44] as [number, number, number] },
+    alternateRowStyles: { fillColor: [247, 250, 238] as [number, number, number] },
+  }
+  doc.setFontSize(15)
+  doc.text(view === 'ringkasan' ? 'Detail Laporan Stok Tersedia' : 'Grafik Stok Tersedia', 40, 42)
+  doc.setFontSize(9)
+  doc.setTextColor(110)
+  doc.text(meta.subtitle, 40, 58)
+  doc.setFontSize(10)
+  doc.setTextColor(20, 48, 31)
+  doc.text(
+    `Total kompos tersedia ${idNumber(data.totalKompos)} kg  ·  Total NOC tersedia ${idNumber(data.totalNoc)} L  ·  ${data.rows.length} lokasi mitra  ·  Update terakhir ${data.last ? longDate(data.last) : '-'}`,
+    40,
+    78,
+  )
+
+  if (view === 'ringkasan') {
+    autoTable(doc, {
+      ...tableStyle,
+      startY: 92,
+      head: [['Lokasi', 'Mitra', 'Kompos tersedia (kg)', 'NOC tersedia (L)', 'Kompos diambil (kg)', 'NOC diambil (L)', 'Update terakhir']],
+      body: data.rows.map(({ station, stock }) => [
+        station.name,
+        station.mitra,
+        idNumber(stock.kompos),
+        idNumber(stock.noc),
+        idNumber(stock.diambilKompos),
+        idNumber(stock.diambilNoc),
+        stock.last ? longDate(stock.last) : '-',
+      ]),
+      foot: [['Total', '', idNumber(data.totalKompos), idNumber(data.totalNoc), idNumber(data.diambilKompos), idNumber(data.diambilNoc), data.last ? longDate(data.last) : '-']],
+      footStyles: { fillColor: [231, 240, 208], textColor: [20, 48, 31] },
+    })
+    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY
+    doc.setFontSize(11)
+    doc.setTextColor(20, 48, 31)
+    doc.text('Riwayat diambil', 40, finalY + 28)
+    autoTable(doc, {
+      ...tableStyle,
+      startY: finalY + 36,
+      head: [['Lokasi', 'Tanggal', 'Kompos (kg)', 'NOC (L)', 'Pengambil']],
+      body: data.history.length
+        ? data.history.map((item) => [item.lokasi, longDate(item.date), idNumber(item.kompos), idNumber(item.noc), item.taker])
+        : [['Belum ada pengambilan pada periode ini', '', '', '', '']],
+    })
+  } else {
+    const labels = data.rows.map((row) => shortStation(row.station.name))
+    const monthLabels = data.months.map((m) => m.name)
+    const W = 360
+    drawBars(doc, { x: 40, y: 100, w: W, h: 190, title: 'Kompos tersedia per lokasi (kg)', labels, values: data.rows.map((r) => r.stock.kompos) })
+    drawBars(doc, { x: 442, y: 100, w: W, h: 190, title: 'NOC tersedia per lokasi (L)', labels, values: data.rows.map((r) => r.stock.noc) })
+    drawBars(doc, { x: 40, y: 310, w: W, h: 190, title: `Tren kompos tersedia ${meta.year} (kg)`, labels: monthLabels, values: data.months.map((m) => m.kompos), highlight: meta.selected >= 0 ? meta.selected : undefined })
+    drawBars(doc, { x: 442, y: 310, w: W, h: 190, title: `Tren NOC tersedia ${meta.year} (L)`, labels: monthLabels, values: data.months.map((m) => m.noc), highlight: meta.selected >= 0 ? meta.selected : undefined })
+    autoTable(doc, {
+      ...tableStyle,
+      startY: 520,
+      head: [['Lokasi', 'Kompos tersedia (kg)', 'Kompos diambil (kg)', 'NOC tersedia (L)', 'NOC diambil (L)']],
+      body: data.rows.map(({ station, stock }) => [station.name, idNumber(stock.kompos), idNumber(stock.diambilKompos), idNumber(stock.noc), idNumber(stock.diambilNoc)]),
+    })
+  }
+  return doc.output('blob')
+}
+
+function ExportSheet({
+  note,
+  busy,
+  disabled,
+  onExport,
+  onClose,
+}: {
+  note: string
+  busy: string
+  disabled?: boolean
+  onExport: (kind: 'xlsx' | 'pdf') => void
+  onClose: () => void
+}) {
+  return (
+    <div className="modal-backdrop" onClick={() => !busy && onClose()}>
+      <section className="promo-sheet gp-sheet mt-picker" onClick={(event) => event.stopPropagation()}>
+        <button className="sheet-handle" onClick={onClose} aria-label="Tutup" />
+        <h2>Ekspor data</h2>
+        <p className="mt-hint">{note}</p>
+        <div className="sa-export">
+          {(
+            [
+              ['xlsx', 'Excel (.xlsx)', 'Tabel lengkap, bisa diedit di Excel'],
+              ['pdf', 'PDF', 'Laporan siap cetak atau dibagikan'],
+            ] as const
+          ).map(([kind, title, hint]) => (
+            <button key={kind} className="mt-all" disabled={disabled || Boolean(busy)} onClick={() => onExport(kind)}>
+              <Icon name="download" size={20} />
+              <span>
+                <b>{title}</b>
+                <small>{busy === kind ? 'Menyiapkan file…' : hint}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function LineChart({
+  labels,
+  values,
+  selected,
+  showAll = false,
+}: {
+  labels: string[]
+  values: number[]
+  selected?: number
+  showAll?: boolean
+}) {
+  const n = values.length
+  if (!n) return null
+  const peak = Math.max(...values, 1)
+  const x = (index: number) => ((index + 0.5) / n) * 100
+  const y = (value: number) => 100 - Math.max((value / peak) * 80, 2)
+  const line = values.map((value, index) => `${x(index)},${y(value)}`).join(' ')
+  return (
+    <div className="mt-line">
+      <div className="mt-line-plot">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polygon points={`${x(0)},100 ${line} ${x(n - 1)},100`} className="area" />
+          <polyline points={line} className="stroke" vectorEffect="non-scaling-stroke" />
+        </svg>
+        {values.map((value, index) => (
+          <i
+            key={labels[index]}
+            className={index === selected ? 'dot on' : 'dot'}
+            style={{ left: `${x(index)}%`, top: `${y(value)}%` }}
+          >
+            {(showAll || index === selected) && <b>{idNumber(value)}</b>}
+          </i>
+        ))}
+      </div>
+      <div className="mt-line-labels" style={{ gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))` }}>
+        {labels.map((text) => (
+          <small key={text}>{text}</small>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AdminReport({
+  stations,
+  period,
+  scopeLabel,
+  productions,
+  pickups,
+  onPick,
+}: {
+  stations: Station[]
+  period: string
+  scopeLabel: string
+  productions: Production[]
+  pickups: Pickup[]
+  onPick: () => void
+}) {
+  const [view, setView] = useState<'ringkasan' | 'grafik'>('ringkasan')
+  const [metric, setMetric] = useState<'kompos' | 'noc'>('kompos')
+  const [chartType, setChartType] = useState<'batang' | 'garis'>('batang')
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [exportOpen, setExportOpen] = useState(false)
+  const [busy, setBusy] = useState('')
+  const [notice, setNotice] = useState('')
+  const rows = stations.map((station) => ({ station, stock: stationStock(station, period, productions, pickups) }))
+  const totalKompos = rows.reduce((sum, row) => sum + row.stock.kompos, 0)
+  const totalNoc = rows.reduce((sum, row) => sum + row.stock.noc, 0)
+  const diambilKompos = rows.reduce((sum, row) => sum + row.stock.diambilKompos, 0)
+  const diambilNoc = rows.reduce((sum, row) => sum + row.stock.diambilNoc, 0)
+  const last = rows.reduce((max, row) => (row.stock.last > max ? row.stock.last : max), '')
+  const detail = rows.find((row) => row.station.id === detailId)
+  const year = period === 'Semua bulan' ? 2026 : Number(period.slice(-4))
+  const selected = monthNames.findIndex((name) => period === `${name} ${year}`)
+  const factorSum = stations.reduce((sum, station) => sum + (stockFactor[station.id] ?? 0), 0)
+  const months = monthNames.map((name) => {
+    const base = mitraSummary(`${name} ${year}`, productions, pickups)
+    return {
+      name,
+      kompos: Math.round(base.tersedia * factorSum * 10) / 10,
+      noc: Math.round(base.nocTersedia * factorSum * 10) / 10,
+    }
+  })
+  const history = rows
+    .flatMap(({ station, stock }) => stock.history.map((item) => ({ lokasi: station.name, date: item.date, kompos: item.kompos, noc: item.noc, taker: item.taker })))
+    .sort((a, b) => b.date.localeCompare(a.date))
+
+  async function exportAs(kind: 'xlsx' | 'pdf') {
+    setBusy(kind)
+    try {
+      const data: ReportData = { rows, totalKompos, totalNoc, diambilKompos, diambilNoc, last, months, history }
+      const today = new Date()
+      const subtitle = `Periode ${period}  ·  ${scopeLabel}  ·  Dibuat ${today.getDate()} ${adminMonths[today.getMonth()]} ${today.getFullYear()}`
+      const blob = kind === 'xlsx' ? await reportToXlsx(view, data, year) : await reportToPdf(view, data, { subtitle, year, selected })
+      saveBlob(blob, `laporan-stok-${view}-${today.toISOString().slice(0, 10)}.${kind}`)
+      setNotice(`Laporan ${view === 'ringkasan' ? 'Ringkasan' : 'Grafik'} diekspor ke ${kind === 'xlsx' ? 'Excel' : 'PDF'}.`)
+      setExportOpen(false)
+    } catch {
+      setNotice('Ekspor gagal. Coba lagi.')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  if (detail) {
+    const { station, stock } = detail
+    return (
+      <>
+        <div className="mt-graph-head">
+          <button className="icon-button" onClick={() => setDetailId(null)} aria-label="Kembali ke Detail Laporan">
+            <Icon name="back" />
+          </button>
+          <div className="sa-head sa-head-back">
+            <h1>{station.name}</h1>
+            <small>
+              {station.mitra} · {period}
+            </small>
+          </div>
+        </div>
+
+        <section className="mt-panel">
+          <h2>Stok tersedia</h2>
+          <div className="mt-usage-grid">
+            <div>
+              <span className="mt-stat-icon">
+                <Icon name="sprout" size={18} />
+              </span>
+              <p>
+                <small>Kompos tersedia</small>
+                <strong>
+                  {idNumber(stock.kompos)} <em>kg</em>
+                </strong>
+              </p>
+            </div>
+            <div>
+              <span className="mt-stat-icon">
+                <Icon name="drop" size={18} />
+              </span>
+              <p>
+                <small>NOC tersedia</small>
+                <strong>
+                  {idNumber(stock.noc)} <em>L</em>
+                </strong>
+              </p>
+            </div>
+          </div>
+          <p className="sa-updated">
+            <Icon name="clock" size={14} />
+            {stock.last ? `Update terakhir ${longDate(stock.last)}` : 'Belum ada data'}
+          </p>
+        </section>
+
+        <section className="mt-panel">
+          <h2>Riwayat diambil</h2>
+          <div className="mt-usage-grid">
+            <div>
+              <span className="mt-stat-icon">
+                <Icon name="truck" size={18} />
+              </span>
+              <p>
+                <small>Kompos diambil</small>
+                <strong>
+                  {idNumber(stock.diambilKompos)} <em>kg</em>
+                </strong>
+              </p>
+            </div>
+            <div>
+              <span className="mt-stat-icon">
+                <Icon name="truck" size={18} />
+              </span>
+              <p>
+                <small>NOC diambil</small>
+                <strong>
+                  {idNumber(stock.diambilNoc)} <em>L</em>
+                </strong>
+              </p>
+            </div>
+          </div>
+          {stock.history.length === 0 ? (
+            <p className="mt-hint sa-history">Belum ada pengambilan pada periode ini.</p>
+          ) : (
+            <ul className="mt-recent sa-history">
+              {stock.history.map((item) => (
+                <li key={item.id}>
+                  <span className="mt-stat-icon">
+                    <Icon name="truck" size={18} />
+                  </span>
+                  <div>
+                    <strong>
+                      Kompos {idNumber(item.kompos)} kg · NOC {idNumber(item.noc)} L
+                    </strong>
+                    <small>
+                      {longDate(item.date)} · {item.taker}
+                    </small>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </>
+    )
+  }
+
+  const unit = metric === 'kompos' ? 'kg' : 'L'
+  const label = metric === 'kompos' ? 'Kompos' : 'NOC'
+  const perStation = rows.map((row) => (metric === 'kompos' ? row.stock.kompos : row.stock.noc))
+  const stockNow = metric === 'kompos' ? totalKompos : totalNoc
+  const taken = metric === 'kompos' ? diambilKompos : diambilNoc
+  const trend = months.map((m) => (metric === 'kompos' ? m.kompos : m.noc))
+  const peak = Math.max(...perStation, 1)
+  const trendPeak = Math.max(...trend, 1)
+
+  return (
+    <>
+      <div className="mt-graph-head">
+        <div className="sa-head">
+          <h1>Detail Laporan</h1>
+          <small>Stok tersedia · {scopeLabel}</small>
+        </div>
+        <div className="sa-head-actions">
+          <button className="mt-period light" onClick={onPick} aria-label="Pilih periode">
+            <Icon name="calendar" size={15} />
+            <span>{period}</span>
+            <Icon name="chevron" size={13} />
+          </button>
+          <button className="mt-period light icon-only" onClick={() => setExportOpen(true)} aria-label="Ekspor laporan">
+            <Icon name="download" size={16} />
+          </button>
+        </div>
+      </div>
+      {notice && (
+        <p className="mt-saved" role="status">
+          <Icon name="check" size={16} strokeWidth={2.6} /> {notice}
+        </p>
+      )}
+      <div className="sa-tabbar">
+        <div className="sa-tabs" role="tablist" aria-label="Tampilan laporan">
+          {(
+            [
+              ['ringkasan', 'Ringkasan'],
+              ['grafik', 'Grafik'],
+            ] as const
+          ).map(([key, text]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={view === key}
+              className={view === key ? 'active' : ''}
+              onClick={() => {
+                setView(key)
+                setNotice('')
+              }}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+        {view === 'grafik' && (
+          <div className="sa-tools">
+            <div className="mt-toggle sm" role="group" aria-label="Jenis stok">
+              {(
+                [
+                  ['kompos', 'Kompos'],
+                  ['noc', 'NOC'],
+                ] as const
+              ).map(([key, text]) => (
+                <button key={key} className={metric === key ? 'active' : ''} aria-pressed={metric === key} onClick={() => setMetric(key)}>
+                  {text}
+                </button>
+              ))}
+            </div>
+            <div className="mt-toggle sm icons" role="group" aria-label="Jenis grafik">
+              {(
+                [
+                  ['batang', 'barchart', 'Grafik batang'],
+                  ['garis', 'linechart', 'Grafik garis'],
+                ] as const
+              ).map(([key, icon, text]) => (
+                <button
+                  key={key}
+                  className={chartType === key ? 'active' : ''}
+                  aria-pressed={chartType === key}
+                  aria-label={text}
+                  title={text}
+                  onClick={() => setChartType(key)}
+                >
+                  <Icon name={icon} size={15} strokeWidth={2.2} />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {view === 'ringkasan' ? (
+        <>
+          <section className="gp-card mt-hero sa-total">
+            <svg className="gp-deco deco-b" viewBox="0 0 120 160" aria-hidden="true">
+              <path d="M110 6C40 10 6 52 8 108c1 26 18 46 44 46 52 0 62-72 58-148z" />
+            </svg>
+            <div className="gp-card-top">
+              <div>
+                <span>Total stok tersedia</span>
+              </div>
+            </div>
+            <div className="sa-total-grid">
+              <div>
+                <strong>
+                  {idNumber(totalKompos)} <small>kg</small>
+                </strong>
+                <span>Kompos tersedia</span>
+              </div>
+              <div>
+                <strong>
+                  {idNumber(totalNoc)} <small>L</small>
+                </strong>
+                <span>NOC tersedia</span>
+              </div>
+            </div>
+            <p className="mt-hero-sub">
+              {rows.length} lokasi mitra <i /> {last ? `Update terakhir ${longDate(last)}` : 'Belum ada data'}
+            </p>
+          </section>
+
+          <h3 className="mt-sub">Stok per lokasi mitra</h3>
+          <section className="mt-panel mt-list" aria-label="Stok per lokasi mitra">
+            {rows.length === 0 && <p className="mt-hint">Belum ada kompos station.</p>}
+            {rows.map(({ station, stock }) => (
+              <button key={station.id} className="mt-member" onClick={() => setDetailId(station.id)}>
+                <span className="mt-stat-icon">
+                  <Icon name="store" size={18} />
+                </span>
+                <span className="mt-member-info">
+                  <strong>{station.name}</strong>
+                  <small>
+                    Kompos {idNumber(stock.kompos)} kg · NOC {idNumber(stock.noc)} L
+                  </small>
+                  <small>{stock.last ? `Update ${longDate(stock.last)}` : 'Belum ada data'}</small>
+                </span>
+                <Icon name="chevron" size={16} />
+              </button>
+            ))}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="mt-panel">
+            <h2>
+              {label} tersedia per lokasi ({unit})
+            </h2>
+            {chartType === 'batang' ? (
+              <div className="mt-bars sa-bars">
+                {rows.map(({ station }, index) => (
+                  <div key={station.id}>
+                    <b>{idNumber(perStation[index])}</b>
+                    <span className="dark" style={{ height: `${Math.max((perStation[index] / peak) * 100, 3)}%` }} />
+                    <small>{shortStation(station.name)}</small>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <LineChart labels={rows.map(({ station }) => shortStation(station.name))} values={perStation} showAll />
+            )}
+            {rows.length === 0 && <p className="mt-hint">Belum ada kompos station.</p>}
+          </section>
+
+          <section className="mt-panel">
+            <h2>
+              {label} tersedia dan diambil ({unit})
+            </h2>
+            {chartType === 'batang' ? (
+              <div className="mt-bars two">
+                {(
+                  [
+                    ['Tersedia', stockNow, 'dark'],
+                    ['Diambil', taken, 'light'],
+                  ] as const
+                ).map(([text, value, tone]) => (
+                  <div key={text}>
+                    <b>{idNumber(value)}</b>
+                    <span className={tone} style={{ height: `${Math.max((value / Math.max(stockNow, taken, 1)) * 100, 3)}%` }} />
+                    <small>{text}</small>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <LineChart labels={['Tersedia', 'Diambil']} values={[stockNow, taken]} showAll />
+            )}
+          </section>
+
+          <section className="mt-panel">
+            <h2>
+              Tren {label.toLowerCase()} tersedia {year} ({unit})
+            </h2>
+            {chartType === 'batang' ? (
+              <div className="mt-bars twelve">
+                {months.map((m, index) => {
+                  const on = index === selected
+                  return (
+                    <div key={m.name}>
+                      <b>{on ? idNumber(trend[index]) : ''}</b>
+                      <span className={on ? 'dark' : 'light'} style={{ height: `${Math.max((trend[index] / trendPeak) * 100, 3)}%` }} />
+                      <small>{m.name}</small>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <LineChart labels={months.map((m) => m.name)} values={trend} selected={selected >= 0 ? selected : undefined} />
+            )}
+          </section>
+        </>
+      )}
+
+      {exportOpen && (
+        <ExportSheet
+          note={`Laporan ${view === 'ringkasan' ? 'Ringkasan (tabel stok dan riwayat diambil)' : 'Grafik (grafik dan data tren)'} periode ${period}, ${scopeLabel}.`}
+          busy={busy}
+          disabled={rows.length === 0}
+          onExport={exportAs}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
+    </>
+  )
+}
+
+// ---- GladiPoint untuk Super Admin (mengikuti halaman super admin aplikasi saat ini) ----
+type AdminTab = 'ringkasan' | 'station' | 'pengguna' | 'laporan' | 'lainnya'
+
+const adminNav: [AdminTab, string, string][] = [
+  ['ringkasan', 'home', 'Ringkasan'],
+  ['station', 'pin', 'Kompos Station'],
+  ['pengguna', 'users', 'Pengguna'],
+  ['laporan', 'clipboard', 'Laporan'],
+  ['lainnya', 'more', 'Lainnya'],
+]
+
+// Data contoh halaman Super Admin (angka dari tampilan aplikasi saat ini).
+const adminMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember']
+const adminCycle = 'siklus 2.000 kg × 5 per 1.000 kg'
+
+function SuperAdminGladi({
   onBack,
   account,
   setAccount,
@@ -3412,6 +5673,8 @@ function MitraGladi({
   setPhoto,
   role,
   setRole,
+  productions,
+  pickups,
 }: {
   onBack: () => void
   account: Account
@@ -3420,6 +5683,321 @@ function MitraGladi({
   setPhoto: (photo: string | null) => void
   role: AppRole
   setRole: (role: AppRole) => void
+  productions: Production[]
+  pickups: Pickup[]
+}) {
+  const [tab, setTab] = useState<AdminTab>('ringkasan')
+  const [akun, setAkun] = useState(false)
+  const [period, setPeriod] = useState('Nov 2026')
+  const [picker, setPicker] = useState(false)
+  const [pickYear, setPickYear] = useState(2026)
+  const [stations, setStations] = useState(seedStations)
+  const [users, setUsers] = useState(seedUsers)
+  const [scope, setScope] = useState('Seluruh cakupan')
+  const [scopeSheet, setScopeSheet] = useState(false)
+  const [limit, setLimit] = useState(10)
+  const [limitSheet, setLimitSheet] = useState(false)
+  const [limitInput, setLimitInput] = useState('10')
+  const used = 8
+  const pct = Math.round((used / limit) * 100)
+  const state = pct >= 100 ? 'over' : pct >= 80 ? 'warn' : 'ok'
+  const stateLabel = { over: 'Melebihi', warn: 'Waspada', ok: 'Aman' }[state]
+  const stateNote = {
+    over: 'Melebihi batas — segera hubungi mitra untuk menghentikan pemakaian.',
+    warn: 'Mendekati batas — ingatkan mitra untuk mengatur dosis.',
+    ok: 'Pemakaian masih dalam batas.',
+  }[state]
+  const periodLabel =
+    period === 'Semua bulan' ? period : `${adminMonths[monthNames.indexOf(period.slice(0, 3))]} ${period.slice(4)}`
+  const newLimit = Number(limitInput.replace(',', '.'))
+  const adminScopes = ['Seluruh cakupan', ...stations.map((item) => item.name)]
+  const activeScope = adminScopes.includes(scope) ? scope : adminScopes[0]
+  const scoped = stations.filter((item) => activeScope === adminScopes[0] || item.name === activeScope)
+  const bsoTotal = 57.5
+  const heroStock = scoped.reduce(
+    (sum, station) => {
+      const stock = stationStock(station, period, productions, pickups)
+      return { kompos: sum.kompos + stock.kompos, noc: sum.noc + stock.noc }
+    },
+    { kompos: 0, noc: 0 },
+  )
+  const memberTotal = users.filter(
+    (item) => item.role === 'Member Gladi' && scoped.some((station) => station.id === item.stationId),
+  ).length
+
+  if (akun) {
+    return (
+      <AccountPage
+        title="Profil Saya"
+        role={role}
+        setRole={setRole}
+        account={account}
+        setAccount={setAccount}
+        photo={photo}
+        setPhoto={setPhoto}
+        onBack={() => setAkun(false)}
+      />
+    )
+  }
+
+  return (
+    <>
+      <main className="page gladi-page mitra-page sa-page">
+        <header className="gp-top">
+          <button className="icon-button" onClick={onBack} aria-label="Kembali ke AgroFertile">
+            <Icon name="back" />
+          </button>
+          <div className="gp-brand">
+            <img src={`${BASE}assets/gladipoint-logo.png`} alt="GladiPoint" />
+            <span>Bersama untuk Pertanian Lebih Baik</span>
+          </div>
+          <button className="gp-bell" aria-label="Notifikasi, 1 baru">
+            <Icon name="bell" size={22} />
+            <i className="sa-badge">1</i>
+          </button>
+          <button className="avatar gp-avatar sa-avatar" onClick={() => setAkun(true)} aria-label="Profil Saya">
+            {photo ? <img src={photo} alt="" /> : initialsOf(account.name)}
+          </button>
+        </header>
+
+        {tab === 'ringkasan' ? (
+          <>
+            <div className="sa-title">
+              <h1>Ringkasan program</h1>
+              <span className="sa-role">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z" />
+                </svg>
+                Super Admin
+              </span>
+            </div>
+
+            <div className="sa-filters">
+              <button className="sa-pill" onClick={() => setPicker(true)} aria-label="Pilih periode">
+                <Icon name="calendar" size={18} />
+                <span>{periodLabel}</span>
+                <Icon name="chevron" size={14} />
+              </button>
+              <button className="sa-pill" onClick={() => setScopeSheet(true)} aria-label="Pilih cakupan">
+                <Icon name="pin" size={18} />
+                <span>{activeScope}</span>
+                <Icon name="chevron" size={14} />
+              </button>
+            </div>
+
+            <section className="gp-card mt-hero sa-hero2">
+              <svg className="gp-deco deco-b" viewBox="0 0 120 160" aria-hidden="true">
+                <path d="M110 6C40 10 6 52 8 108c1 26 18 46 44 46 52 0 62-72 58-148z" />
+              </svg>
+              <div className="gp-card-top">
+                <div>
+                  <span>BSO periode terpilih</span>
+                </div>
+              </div>
+              <div className="mt-hero-value">
+                <strong>
+                  {idNumber(bsoTotal)} <small>kg</small>
+                </strong>
+              </div>
+              <p className="mt-hero-sub">
+                {idNumber(bsoTotal / 1000, 4)} ton <i /> Bank Sampah Organik
+              </p>
+              <div className="sa-hero-stats">
+                <button onClick={() => setTab('station')} aria-label={`Buka Kompos Station, ${scoped.length} station`}>
+                  <strong>{idNumber(scoped.length, 0)}</strong>
+                  <small>
+                    Kompos station <Icon name="chevron" size={11} strokeWidth={2.6} />
+                  </small>
+                </button>
+                <button onClick={() => setTab('pengguna')} aria-label={`Buka halaman Pengguna, ${idNumber(memberTotal, 0)} member`}>
+                  <strong>{idNumber(memberTotal, 0)}</strong>
+                  <small>
+                    Member terdaftar <Icon name="chevron" size={11} strokeWidth={2.6} />
+                  </small>
+                </button>
+                <button className="sa-stock" onClick={() => setTab('laporan')} aria-label="Buka Detail Laporan stok tersedia">
+                  <div>
+                    <strong>
+                      {idNumber(heroStock.kompos)} <em>kg</em>
+                    </strong>
+                    <small>Kompos tersedia</small>
+                  </div>
+                  <div>
+                    <strong>
+                      {idNumber(heroStock.noc)} <em>L</em>
+                    </strong>
+                    <small>NOC tersedia</small>
+                  </div>
+                  <Icon name="chevron" size={16} />
+                </button>
+              </div>
+            </section>
+
+            <section className="sa-usage">
+              <h2>
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M6 4h12v3l-1 13H7L6 7V4z" />
+                  <path d="M6 7h12" />
+                </svg>
+                Pemakaian Gladiator mitra · bulan ini
+              </h2>
+              <button
+                className="sa-limit"
+                onClick={() => {
+                  setLimitInput(String(limit))
+                  setLimitSheet(true)
+                }}
+              >
+                <Icon name="sliders" size={18} /> Atur batas
+              </button>
+              <div className="sa-usage-row">
+                <strong>
+                  PKG-0001 · PKG Cabang Bojonegoro <em>(Cair)</em>
+                </strong>
+                <span className={`sa-state ${state}`}>{stateLabel}</span>
+              </div>
+              <div className="sa-bar" role="progressbar" aria-valuenow={Math.min(pct, 100)} aria-valuemin={0} aria-valuemax={100}>
+                <i className={state} style={{ width: `${Math.min(pct, 100)}%` }} />
+              </div>
+              <p>
+                {used} dari {limit} liter ({pct}%) · {adminCycle} · {stateNote}
+              </p>
+            </section>
+          </>
+        ) : tab === 'station' ? (
+          <AdminStations stations={stations} setStations={setStations} />
+        ) : tab === 'laporan' ? (
+          <AdminReport
+            stations={scoped}
+            period={period}
+            scopeLabel={activeScope}
+            productions={productions}
+            pickups={pickups}
+            onPick={() => setPicker(true)}
+          />
+        ) : tab === 'pengguna' ? (
+          <AdminUsers users={users} setUsers={setUsers} stations={stations} />
+        ) : (
+          <div className="empty-card mt-empty">
+            <Icon name={adminNav.find(([key]) => key === tab)?.[1] ?? 'info'} size={50} />
+            <h3>{adminNav.find(([key]) => key === tab)?.[2]}</h3>
+            <p>Halaman ini akan dirancang pada tahap berikutnya.</p>
+          </div>
+        )}
+      </main>
+
+      <nav className="mt-nav sa-nav" aria-label="Navigasi Super Admin">
+        {adminNav.map(([key, icon, label]) => (
+          <button
+            key={key}
+            className={tab === key ? 'active' : ''}
+            onClick={() => setTab(key)}
+            aria-current={tab === key ? 'page' : undefined}
+          >
+            <Icon name={icon} size={22} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {picker && (
+        <MitraPeriodSheet
+          period={period}
+          setPeriod={setPeriod}
+          pickYear={pickYear}
+          setPickYear={setPickYear}
+          onClose={() => setPicker(false)}
+        />
+      )}
+
+      {scopeSheet && (
+        <div className="modal-backdrop" onClick={() => setScopeSheet(false)}>
+          <section className="promo-sheet gp-sheet mt-picker" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setScopeSheet(false)} aria-label="Tutup" />
+            <h2>Pilih cakupan</h2>
+            <div className="photo-actions role-list">
+              {adminScopes.map((item) => (
+                <button
+                  key={item}
+                  className={item === activeScope ? 'current' : ''}
+                  onClick={() => {
+                    setScope(item)
+                    setScopeSheet(false)
+                  }}
+                >
+                  <Icon name="pin" size={22} /> {item}
+                  {item === activeScope && <Icon name="check" size={18} strokeWidth={3} />}
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {limitSheet && (
+        <div className="modal-backdrop" onClick={() => setLimitSheet(false)}>
+          <section className="promo-sheet gp-sheet mt-picker" onClick={(event) => event.stopPropagation()}>
+            <button className="sheet-handle" onClick={() => setLimitSheet(false)} aria-label="Tutup" />
+            <h2>Atur batas pemakaian</h2>
+            <p className="mt-hint">Batas pemakaian Gladiator Cair per bulan untuk PKG Cabang Bojonegoro.</p>
+            <div className="mt-form">
+              <label className="mt-field">
+                <span>Batas (liter)</span>
+                <div className="mt-input-unit">
+                  <input
+                    inputMode="decimal"
+                    value={limitInput}
+                    onChange={(event) => setLimitInput(event.target.value.replace(/[^0-9.,]/g, ''))}
+                  />
+                  <i>L</i>
+                </div>
+              </label>
+              <button
+                className="mt-cta"
+                disabled={!(newLimit > 0)}
+                onClick={() => {
+                  setLimit(newLimit)
+                  setLimitSheet(false)
+                }}
+              >
+                Simpan batas
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  )
+}
+
+function MitraGladi({
+  onBack,
+  account,
+  setAccount,
+  photo,
+  setPhoto,
+  role,
+  setRole,
+  redemptions,
+  onConfirmRedemption,
+  productions,
+  setProductions,
+  pickups,
+  setPickups,
+}: {
+  onBack: () => void
+  account: Account
+  setAccount: (account: Account) => void
+  photo: string | null
+  setPhoto: (photo: string | null) => void
+  role: AppRole
+  setRole: (role: AppRole) => void
+  redemptions: Redemption[]
+  onConfirmRedemption: (id: string, received: NonNullable<Redemption['received']>) => void
+  productions: Production[]
+  setProductions: React.Dispatch<React.SetStateAction<Production[]>>
+  pickups: Pickup[]
+  setPickups: React.Dispatch<React.SetStateAction<Pickup[]>>
 }) {
   const [page, setPage] = useState<MitraTab>('ringkasan')
   const [akun, setAkun] = useState(false)
@@ -3427,11 +6005,11 @@ function MitraGladi({
   const [picker, setPicker] = useState(false)
   const [trendType, setTrendType] = useState<'batang' | 'garis'>('batang')
   const [pickYear, setPickYear] = useState(2026)
-  const [productions, setProductions] = useState(seedProductions)
-  const [pickups, setPickups] = useState(seedPickups)
   const [usage, setUsage] = useState(seedUsage)
+  const waiting = redemptions.filter((item) => !item.received).length
   const gladiator = usageTotals(period, usage)
-  const leader = memberRanking(period)[0]
+  const myRank = mitraRanking(period).findIndex((row) => row.me) + 1
+  const mitraCount = mitraRanking(period).length
   const data = mitraSummary(period, productions, pickups)
 
   if (akun) {
@@ -3520,25 +6098,6 @@ function MitraGladi({
                 <Icon name="user" size={16} />
                 <strong>{account.name}</strong>
               </div>
-              <div className="mt-hero-actions">
-                <button
-                  className="primary"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setPage('bso')
-                  }}
-                >
-                  <Icon name="plus" size={16} strokeWidth={2.6} /> Catat BSO
-                </button>
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setPage('grafik')
-                  }}
-                >
-                  Detail operasional <Icon name="chevron" size={13} strokeWidth={2.4} />
-                </button>
-              </div>
             </section>
 
             <section className="mt-ledger" aria-label="Ringkasan kompos dan NOC">
@@ -3580,6 +6139,21 @@ function MitraGladi({
                 )
               })}
             </section>
+
+            <div className="mt-mini-grid one">
+              <button onClick={() => setPage('hadiah')}>
+                <span className="mt-stat-icon">
+                  <Icon name="gift" size={18} />
+                </span>
+                <p>
+                  <small>Rekap hadiah</small>
+                  <strong className="clip">
+                    {waiting > 0 ? `${waiting} hadiah menunggu konfirmasi` : 'Semua hadiah sudah diterima'}
+                  </strong>
+                </p>
+                <Icon name="chevron" size={16} />
+              </button>
+            </div>
 
             <button className="mt-usage" onClick={() => setPage('gladiator')}>
               <div className="mt-usage-head">
@@ -3632,12 +6206,19 @@ function MitraGladi({
                 </span>
                 <p>
                   <small>Peringkat</small>
-                  <strong className="clip">{leader ? `#1 ${leader.member.name}` : 'Belum ada data'}</strong>
+                  <strong className="clip">{myRank ? `#${myRank} dari ${mitraCount} mitra` : 'Belum ada data'}</strong>
                 </p>
                 <Icon name="chevron" size={16} />
               </button>
             </div>
           </>
+        ) : page === 'tersedia' ? (
+          <MitraStock data={data} period={period} onPick={() => setPicker(true)} />
+        ) : page === 'hadiah' ? (
+          <MitraRewards
+            records={redemptions}
+            onConfirm={onConfirmRedemption}
+          />
         ) : page === 'member' ? (
           <MitraMembers />
         ) : page === 'peringkat' ? (
@@ -3771,58 +6352,48 @@ function MitraGladi({
         )}
       </main>
 
-      {picker && (
-        <div className="modal-backdrop" onClick={() => setPicker(false)}>
-          <section className="promo-sheet gp-sheet mt-picker" onClick={(event) => event.stopPropagation()}>
-            <button className="sheet-handle" onClick={() => setPicker(false)} aria-label="Tutup" />
-            <h2>Pilih periode</h2>
+      <nav className="mt-nav" aria-label="Navigasi Mitra">
+        {(
+          [
+            ['produksi', 'sprout', 'Hasil Produksi'],
+            ['pengambilan', 'truck', 'Stok Diambil'],
+            ['bso', 'plus', 'Catat BSO'],
+            ['tersedia', 'box', 'Stok Tersedia'],
+            ['grafik', 'activity', 'Detail Operasi'],
+          ] as const
+        ).map(([key, icon, label]) =>
+          key === 'bso' ? (
             <button
-              className={`mt-all ${period === 'Semua bulan' ? 'active' : ''}`}
-              onClick={() => {
-                setPeriod('Semua bulan')
-                setPicker(false)
-              }}
+              key={key}
+              className={`mt-nav-fab${page === key ? ' active' : ''}`}
+              onClick={() => setPage(key)}
+              aria-label={label}
+              aria-current={page === key ? 'page' : undefined}
             >
-              <Icon name="layers" size={20} />
-              <span>
-                <b>Semua bulan</b>
-                <small>Total seluruh periode</small>
-              </span>
-              {period === 'Semua bulan' && <Icon name="check" size={18} strokeWidth={3} />}
+              <Icon name={icon} size={26} strokeWidth={2.6} />
             </button>
-            <div className="mt-years" role="tablist" aria-label="Tahun">
-              {mitraYears.map((year) => (
-                <button
-                  key={year}
-                  role="tab"
-                  aria-selected={pickYear === year}
-                  className={pickYear === year ? 'active' : ''}
-                  onClick={() => setPickYear(year)}
-                >
-                  {year}
-                </button>
-              ))}
-            </div>
-            <div className="mt-months">
-              {monthNames.map((name) => {
-                const key = `${name} ${pickYear}`
-                const empty = mitraPeriods[key].bso === 0
-                return (
-                  <button
-                    key={key}
-                    className={`${period === key ? 'active' : ''} ${empty ? 'empty' : ''}`}
-                    onClick={() => {
-                      setPeriod(key)
-                      setPicker(false)
-                    }}
-                  >
-                    {name}
-                  </button>
-                )
-              })}
-            </div>
-          </section>
-        </div>
+          ) : (
+            <button
+              key={key}
+              className={page === key ? 'active' : ''}
+              onClick={() => setPage(page === key ? 'ringkasan' : key)}
+              aria-current={page === key ? 'page' : undefined}
+            >
+              <Icon name={icon} size={22} />
+              <span>{label}</span>
+            </button>
+          ),
+        )}
+      </nav>
+
+      {picker && (
+        <MitraPeriodSheet
+          period={period}
+          setPeriod={setPeriod}
+          pickYear={pickYear}
+          setPickYear={setPickYear}
+          onClose={() => setPicker(false)}
+        />
       )}
 
     </>
@@ -3833,21 +6404,42 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('home')
   const [points, setPoints] = useState(GLADI_POINTS)
   const [activities, setActivities] = useState(initialActivities)
+  const [redemptions, setRedemptions] = useState(seedRedemptions)
+  // Stok mitra dipakai bersama: role Mitra mencatat, role Petani hanya melihat.
+  const [productions, setProductions] = useState(seedProductions)
+  const [pickups, setPickups] = useState(seedPickups)
   const [photo, setPhoto] = useState<string | null>(null)
   const [role, setRole] = useState<AppRole>('Petani')
   const [accounts, setAccounts] = useState<Partial<Record<AppRole, Account>>>({})
   // Tiap role punya akun sendiri; Mitra memakai nama khusus agar tidak membingungkan.
-  const account = accounts[role] ?? (role === 'Mitra' ? { ...initialAccount, name: 'Mitra Bojonegoro Kanwil I', email: 'mitra.bojonegoro@agrifertile.com' } : initialAccount)
+  const account =
+    accounts[role] ??
+    (role === 'Mitra'
+      ? { ...initialAccount, name: 'Mitra Bojonegoro Kanwil I', email: 'mitra.bojonegoro@agrifertile.com' }
+      : role === 'Super Admin'
+        ? { ...initialAccount, name: 'Super Admin AgroFertile', email: 'superadmin@agrifertile.com' }
+        : initialAccount)
   const setAccount = (next: Account) => setAccounts((current) => ({ ...current, [role]: next }))
   const [consultFrom, setConsultFrom] = useState<Tab>('spring')
 
+  function confirmRedemption(id: string, received: NonNullable<Redemption['received']>) {
+    setRedemptions((list) => list.map((item) => (item.id === id ? { ...item, received } : item)))
+  }
+
+  // Member menukar poin; hadiah diambil di mitra, lalu mitra mengonfirmasi dengan foto.
   function redeem(reward: { name: string; cost: number }) {
+    const next = Math.max(...redemptions.map((item) => Number(item.id.slice(4)))) + 1
+    const id = `TKR-${String(next).padStart(6, '0')}`
+    setRedemptions((list) => [
+      { id, code: 'GP-00001', reward: reward.name, cost: reward.cost, at: new Date().toISOString() },
+      ...list,
+    ])
     setPoints((value) => value - reward.cost)
     setActivities((list) => [
       {
         id: `t${list.length}`,
         kind: 'tukar',
-        ref: `TKR-${String(list.length).padStart(6, '0')}`,
+        ref: id,
         status: 'Berhasil',
         title: 'Poin berhasil ditukar',
         meta: `Baru saja · ${reward.name}`,
@@ -3858,6 +6450,7 @@ export default function App() {
       },
       ...list,
     ])
+    return id
   }
 
   return (
@@ -3868,6 +6461,7 @@ export default function App() {
           account={account}
           photo={photo}
           role={role}
+          redemptions={redemptions}
         />}
       {tab === 'gladisplash' && <GladiSplash onDone={() => setTab('gladipoint')} />}
       {tab === 'agrosplash' && <AgroSplash onDone={() => setTab('home')} />}
@@ -3880,12 +6474,34 @@ export default function App() {
           setPhoto={setPhoto}
           role={role}
           setRole={setRole}
+          redemptions={redemptions}
+          onConfirmRedemption={confirmRedemption}
+          productions={productions}
+          setProductions={setProductions}
+          pickups={pickups}
+          setPickups={setPickups}
         />
       )}
-      {tab === 'gladipoint' && role !== 'Mitra' && <GladiPoint
+      {tab === 'gladipoint' && role === 'Super Admin' && (
+        <SuperAdminGladi
+          onBack={() => setTab('agrosplash')}
+          account={account}
+          setAccount={setAccount}
+          photo={photo}
+          setPhoto={setPhoto}
+          role={role}
+          setRole={setRole}
+          productions={productions}
+          pickups={pickups}
+        />
+      )}
+      {tab === 'gladipoint' && role !== 'Mitra' && role !== 'Super Admin' && <GladiPoint
           onBack={() => setTab('agrosplash')}
           points={points}
           activities={activities}
+          redemptions={redemptions}
+          productions={productions}
+          pickups={pickups}
           onRedeem={redeem}
           account={account}
           setAccount={setAccount}
@@ -3906,6 +6522,8 @@ export default function App() {
             setRole(next)
             // Mitra langsung masuk ke GladiPoint sebagai halaman utama.
             if (next === 'Mitra') setTab('gladipoint')
+            // Super Admin memulai dari beranda AgroFertile, lalu masuk GladiPoint lewat menu.
+            if (next === 'Super Admin') setTab('home')
           }}
           account={account}
           setAccount={setAccount}
